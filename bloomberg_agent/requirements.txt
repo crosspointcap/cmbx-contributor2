@@ -1,0 +1,8 @@
+supabase==2.3.0
+python-dotenv==1.0.0
+pystray==0.19.5
+Pillow==10.2.0
+schedule==1.2.1
+pytz==2024.1
+# blpapi must be installed manually from Bloomberg API wheel file:
+# pip install blpapi-3.x.x-cp311-cp311-win_amd64.whl
