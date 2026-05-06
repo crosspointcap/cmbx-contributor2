@@ -354,7 +354,7 @@ export default function BackendPage() {
     setFlashRows(prev => ({ ...prev, [key]: color }))
     setTimeout(() => {
       setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
-    }, 10000)
+    }, 20000)
   }
 
   function handleDealerClick(code: string) {

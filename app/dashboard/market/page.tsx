@@ -136,15 +136,10 @@ export default function MarketPage() {
   }, [authChecked])
 
   function flashRowEffect(key: string, color: 'red' | 'green') {
-    let count = 0
-    const id = setInterval(() => {
-      setFlashRows(prev => {
-        if (key in prev) { const n = { ...prev }; delete n[key]; return n }
-        return { ...prev, [key]: color }
-      })
-      count++
-      if (count >= 6) clearInterval(id)
-    }, 250)
+    setFlashRows(prev => ({ ...prev, [key]: color }))
+    setTimeout(() => {
+      setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
+    }, 20000)
   }
 
   const myCode  = profile?.dealer_code ?? null
