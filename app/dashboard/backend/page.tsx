@@ -74,6 +74,16 @@ interface TradeLog {
   price: number | null
 }
 
+interface BlotterTrade {
+  id: string
+  time: string
+  action: 'HIT' | 'LIFT'
+  series: string
+  tranche: string
+  dealer: string
+  price: number | null
+}
+
 function fmtTime(ts: string) {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -124,6 +134,8 @@ export default function BackendPage() {
   const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
+  const [showBlotter, setShowBlotter] = useState(false)
+  const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
 
   function toggleCollapse(seriesNum: string) {
     setCollapsedSeries(prev => {
@@ -182,17 +194,20 @@ export default function BackendPage() {
         setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
-        const t = payload.new as { series_number: string; tranche_name: string; side: string; price: number | null; dealer: string; created_at: string }
+        const t = payload.new as { id: string; series_number: string; tranche_name: string; side: string; price: number | null; dealer: string; created_at: string }
         const key = `${t.series_number}:${t.tranche_name}`
         flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
-        setTradeLog({
+        const entry: BlotterTrade = {
+          id: t.id,
           time: fmtTime(t.created_at),
           action: t.side === 'hit' ? 'HIT' : 'LIFT',
           series: t.series_number,
           tranche: t.tranche_name,
           dealer: t.dealer,
           price: t.price,
-        })
+        }
+        setTradeLog({ time: entry.time, action: entry.action, series: entry.series, tranche: entry.tranche, dealer: entry.dealer, price: entry.price })
+        setBlotterTrades(prev => [entry, ...prev])
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_heartbeat' }, (payload) => {
         const hb = payload.new as { bbg_connected?: boolean; active?: boolean }
@@ -201,15 +216,27 @@ export default function BackendPage() {
       .subscribe()
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }] = await Promise.all([
+      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
         supabase.from('agent_heartbeat').select('*').limit(1).single(),
+        supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(200),
       ])
       if (cancelled) return
       if (sd) setSeries(sd)
       if (td) setTranches(td)
+      if (tr) {
+        setBlotterTrades(tr.map((t: any) => ({
+          id: t.id,
+          time: fmtTime(t.created_at),
+          action: t.side === 'hit' ? 'HIT' : 'LIFT',
+          series: t.series_number,
+          tranche: t.tranche_name,
+          dealer: t.dealer,
+          price: t.price,
+        })))
+      }
       if (pd) {
         const map: Record<string, Price> = {}
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
@@ -223,19 +250,10 @@ export default function BackendPage() {
   }, [authChecked])
 
   function flashRowEffect(key: string, color: 'red' | 'green') {
-    let count = 0
-    const id = setInterval(() => {
-      setFlashRows(prev => {
-        if (key in prev) {
-          const next = { ...prev }
-          delete next[key]
-          return next
-        }
-        return { ...prev, [key]: color }
-      })
-      count++
-      if (count >= 6) clearInterval(id)
-    }, 250)
+    setFlashRows(prev => ({ ...prev, [key]: color }))
+    setTimeout(() => {
+      setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
+    }, 10000)
   }
 
   function handleDealerClick(code: string) {
@@ -399,6 +417,21 @@ export default function BackendPage() {
           >
             SIGN OUT
           </button>
+          <button
+            onClick={() => setShowBlotter(p => !p)}
+            style={{
+              background: showBlotter ? '#1a1500' : 'transparent',
+              color: showBlotter ? '#f0c040' : '#555',
+              border: `1px solid ${showBlotter ? '#f0c040' : '#2a2a2a'}`,
+              padding: '2px 8px',
+              fontSize: '15px',
+              fontFamily: 'Courier New, monospace',
+              cursor: 'pointer',
+              borderRadius: '2px',
+            }}
+          >
+            BLOTTER
+          </button>
         </div>
       </div>
 
@@ -529,7 +562,8 @@ export default function BackendPage() {
         )}
       </div>
 
-      {/* Grid */}
+      {/* Grid + Blotter */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
           <thead>
@@ -657,6 +691,36 @@ export default function BackendPage() {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Blotter panel */}
+      {showBlotter && (
+        <div style={{ width: '300px', borderLeft: '1px solid #1e1e1e', background: '#080808', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#f0c040', fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0 }}>
+            TRADE BLOTTER
+            <span style={{ color: '#444', fontSize: '11px', fontWeight: 400, marginLeft: '8px' }}>{blotterTrades.length} trades</span>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {blotterTrades.length === 0 ? (
+              <div style={{ padding: '16px 12px', color: '#2a2a2a', fontSize: '13px' }}>— no trades yet</div>
+            ) : (
+              blotterTrades.map((t, i) => (
+                <div key={t.id} style={{ padding: '6px 12px', borderBottom: '1px solid #111', background: i % 2 === 0 ? '#080808' : '#0a0a0a' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <span style={{ color: t.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700, fontSize: '13px' }}>{t.action}</span>
+                    <span style={{ color: '#444', fontSize: '11px' }}>{t.time}</span>
+                  </div>
+                  <div style={{ color: '#ccc', fontSize: '13px' }}>CMBX.{t.series}.{t.tranche}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span style={{ color: '#f0c040', fontSize: '13px' }}>{t.dealer}</span>
+                    <span style={{ color: '#888', fontSize: '13px' }}>@ {t.price ?? '—'}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
       </div>
 
       {/* Trade log bar */}
