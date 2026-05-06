@@ -578,7 +578,11 @@ export default function BackendPage() {
                     </div>
                   </td>
                 </tr>
-                {!isCollapsed && tranches.map((t, tIdx) => {
+                {tranches.filter(t => {
+                  if (!isCollapsed) return true
+                  const p = prices[`${s.series_number}:${t.tranche_name}`]
+                  return p?.bid != null || p?.ask != null
+                }).map((t, tIdx) => {
                   const rowKey = `${s.series_number}:${t.tranche_name}`
                   const price = prices[rowKey]
                   const isActive = selectedRow === rowKey
