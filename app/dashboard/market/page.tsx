@@ -202,12 +202,10 @@ export default function MarketPage() {
           </thead>
           <tbody>
             {series.map(s => {
-              // Only show series that have at least one priced tranche
-              const liveTranches = tranches.filter(t => {
+              const liveCount = tranches.filter(t => {
                 const p = prices[`${s.series_number}:${t.tranche_name}`]
                 return p?.bid != null || p?.ask != null || p?.last_trade_px != null
-              })
-              if (liveTranches.length === 0) return null
+              }).length
 
               const isCollapsed = collapsedSeries.has(s.series_number)
               return (
@@ -221,13 +219,17 @@ export default function MarketPage() {
                           CMBX.{s.series_number}
                         </span>
                         <span style={{ color: '#555', fontSize: '10px', fontWeight: 400 }}>
-                          {liveTranches.length} {liveTranches.length === 1 ? 'price' : 'prices'}
+                          {liveCount} {liveCount === 1 ? 'price' : 'prices'}
                         </span>
                       </div>
                     </td>
                   </tr>
 
-                  {!isCollapsed && liveTranches.map((t, tIdx) => {
+                  {tranches.filter(t => {
+                    if (!isCollapsed) return true
+                    const p = prices[`${s.series_number}:${t.tranche_name}`]
+                    return p?.bid != null || p?.ask != null || p?.last_trade_px != null
+                  }).map((t, tIdx) => {
                     const rowKey = `${s.series_number}:${t.tranche_name}`
                     const price  = prices[rowKey]
                     const flash  = flashRows[rowKey]
