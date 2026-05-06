@@ -19,6 +19,81 @@ const DEFAULT_SIZE: Record<string, number> = {
   BB:     5,
 }
 
+const COUPON_BPS: Record<string, number> = {
+  AAA:    50,
+  AS:    100,
+  AA:    150,
+  A:     200,
+  'BBB-':300,
+  BB:    500,
+}
+
+const MATURITY_DATE: Record<string, string> = {
+  '6':  'February 17, 2047',
+  '7':  'September 17, 2047',
+  '8':  'October 17, 2057',
+  '9':  'September 17, 2058',
+  '10': 'November 17, 2059',
+  '11': 'November 17, 2059',
+  '12': 'August 17, 2061',
+  '13': 'December 17, 2072',
+  '14': 'September 17, 2062',
+  '15': 'November 17, 2064',
+  '16': 'November 17, 2065',
+  '17': 'January 17, 2066',
+  '18': 'January 17, 2067',
+  '19': 'December 17, 2072',
+}
+
+const DEALER_INFO: Record<string, { legal: string; address: string; phone?: string; email: string }> = {
+  MS: {
+    legal: 'Morgan Stanley Co. International PLC',
+    address: '1300 Thames Street, Thames Street Wharf, 3rd Floor\nBaltimore, MD 21231',
+    email: 'spgagency@morganstanley.com; spgderivta@morganstanley.com',
+  },
+  BOA: {
+    legal: 'BofA Securities, Inc.',
+    address: '1 Bryant Park\nNew York, NY 10036',
+    email: 'cmbs.trading@bofa.com',
+  },
+  CITI: {
+    legal: 'Citigroup Global Markets Inc.',
+    address: '390 Greenwich St., 4th Floor\nNew York, NY 10013',
+    phone: '(212) 723-6156',
+    email: 'fi.us.cmbs.trading@citi.com',
+  },
+  JPM: {
+    legal: 'J.P. Morgan Securities LLC',
+    address: '383 Madison Avenue\nNew York, NY 10179',
+    email: 'jpm.cmbx.trading@jpmorgan.com',
+  },
+  GS: {
+    legal: 'Goldman Sachs & Co. LLC',
+    address: '200 West Street\nNew York, NY 10282',
+    email: 'cmbx-desk@gs.com',
+  },
+  UBS: {
+    legal: 'UBS Securities LLC',
+    address: '1285 Avenue of the Americas\nNew York, NY 10019',
+    email: 'cmbx.trading@ubs.com',
+  },
+  BNP: {
+    legal: 'BNP Paribas Securities Corp.',
+    address: '787 Seventh Avenue\nNew York, NY 10019',
+    email: 'cmbx.desk@bnpparibas.com',
+  },
+  DB: {
+    legal: 'Deutsche Bank Securities Inc.',
+    address: '60 Wall Street\nNew York, NY 10005',
+    email: 'cmbx.trading@db.com',
+  },
+  BARC: {
+    legal: 'Barclays Capital Inc.',
+    address: '745 Seventh Avenue\nNew York, NY 10019',
+    email: 'cmbx.trading@barclays.com',
+  },
+}
+
 const DEALER_INACTIVE: Record<string, { bg: string; border: string; color: string }> = {
   MS:   { bg: '#cc3333', border: '#ff6666', color: '#ffe0e0' },
   BOA:  { bg: '#228822', border: '#55cc55', color: '#e0ffe0' },
@@ -90,6 +165,8 @@ interface BlotterTrade {
   series: string
   tranche: string
   dealer: string
+  passive_dealer: string | null
+  trade_size: number | null
   price: number | null
 }
 
@@ -145,6 +222,8 @@ export default function BackendPage() {
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
+  const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
+  const [confirmUpfront, setConfirmUpfront] = useState('')
 
   function toggleCollapse(seriesNum: string) {
     setCollapsedSeries(prev => {
@@ -213,6 +292,8 @@ export default function BackendPage() {
           series: t.series_number,
           tranche: t.tranche_name,
           dealer: t.dealer,
+          passive_dealer: t.passive_dealer ?? null,
+          trade_size: t.trade_size ?? null,
           price: t.price,
         }
         setTradeLog({ time: entry.time, action: entry.action, series: entry.series, tranche: entry.tranche, dealer: entry.dealer, price: entry.price })
@@ -243,6 +324,8 @@ export default function BackendPage() {
           series: t.series_number,
           tranche: t.tranche_name,
           dealer: t.dealer,
+          passive_dealer: t.passive_dealer ?? null,
+          trade_size: t.trade_size ?? null,
           price: t.price,
         })))
       }
@@ -311,7 +394,9 @@ export default function BackendPage() {
     if (!rowKey) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('Select a row first'); return }
     const [seriesNum, trancheName] = rowKey.split(':')
     const px = prices[rowKey]?.bid ?? null
-    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer })
+    const passiveDealer = prices[rowKey]?.bid_dealer ?? null
+    const sz = prices[rowKey]?.bid_size ?? null
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'red')
   }
@@ -323,7 +408,9 @@ export default function BackendPage() {
     if (!rowKey) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('Select a row first'); return }
     const [seriesNum, trancheName] = rowKey.split(':')
     const px = prices[rowKey]?.ask ?? null
-    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer })
+    const passiveDealer = prices[rowKey]?.ask_dealer ?? null
+    const sz = prices[rowKey]?.ask_size ?? null
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'green')
   }
@@ -731,6 +818,12 @@ export default function BackendPage() {
                     <span style={{ color: '#f0c040', fontSize: '13px' }}>{t.dealer}</span>
                     <span style={{ color: '#888', fontSize: '13px' }}>@ {t.price ?? '—'}</span>
                   </div>
+                  <button
+                    onClick={() => { setConfirmTrade(t); setConfirmUpfront('') }}
+                    style={{ marginTop: '5px', width: '100%', background: '#0f0f00', color: '#f0c040', border: '1px solid #333300', padding: '2px 0', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', letterSpacing: '1px', borderRadius: '2px' }}
+                  >
+                    VIEW CONFIRM
+                  </button>
                 </div>
               ))
             )}
@@ -738,6 +831,137 @@ export default function BackendPage() {
         </div>
       )}
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmTrade && (() => {
+        const t = confirmTrade
+        const tradeDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: '2-digit' })
+        const coupon = COUPON_BPS[t.tranche] ?? 0
+        const couponPct = (coupon / 100).toFixed(2)
+        const notional = t.trade_size ? t.trade_size * 1_000_000 : null
+        const notionalFmt = notional ? `$${notional.toLocaleString()}` : '—'
+        const maturity = MATURITY_DATE[t.series] ?? '—'
+        const index = `CMBX.NA.${t.tranche}.${t.series}`
+        const facFee = notional ? `$${(notional / 1_000_000 * 115).toLocaleString()}` : '—'
+
+        // HIT: dealer = Protection Buyer (Seller of Risk), passive = Protection Seller (Buyer of Risk)
+        // LIFT: dealer = Protection Seller (Buyer of Risk), passive = Protection Buyer (Seller of Risk)
+        const buyerCode  = t.action === 'HIT'  ? t.dealer        : (t.passive_dealer ?? '—')
+        const sellerCode = t.action === 'HIT'  ? (t.passive_dealer ?? '—') : t.dealer
+        const buyerInfo  = DEALER_INFO[buyerCode]
+        const sellerInfo = DEALER_INFO[sellerCode]
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '20px' }}>
+            <div id="confirm-doc" style={{ background: '#fff', width: '750px', padding: '48px 56px', fontFamily: 'Georgia, serif', fontSize: '13px', color: '#222', lineHeight: '1.6', flexShrink: 0 }}>
+
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                <div>
+                  <div style={{ color: '#2255aa', fontSize: '14px', marginBottom: '2px' }}>CMBX Trade Confirmation</div>
+                  <div style={{ color: '#2255aa', fontSize: '14px' }}>Trade Date: {tradeDate}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-1px', color: '#111' }}>CROSS<span style={{ color: '#e03020' }}>✕</span>POINT</div>
+                  <div style={{ fontSize: '11px', color: '#888', letterSpacing: '2px' }}>C A P I T A L</div>
+                </div>
+              </div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              {/* Parties */}
+              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Parties to the Transaction:</div>
+              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <span style={{ fontWeight: 700 }}>● Protection Buyer (Seller of Risk):</span><br />
+                  <span style={{ fontWeight: 700 }}>{buyerInfo?.legal ?? buyerCode}</span><br />
+                  {buyerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                  {buyerInfo?.phone && <span>Phone: {buyerInfo.phone}<br /></span>}
+                  {buyerInfo && <span>Email: {buyerInfo.email}</span>}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>● Protection Seller (Buyer of Risk):</span><br />
+                  <span style={{ fontWeight: 700 }}>{sellerInfo?.legal ?? sellerCode}</span><br />
+                  {sellerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                  {sellerInfo?.phone && <span>Phone: {sellerInfo.phone}<br /></span>}
+                  {sellerInfo && <span>Email: {sellerInfo.email}</span>}
+                </div>
+              </div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              {/* Trade Details */}
+              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Trade Details:</div>
+              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
+                <div>● <strong>Index:</strong> {index}</div>
+                <div>● <strong>Notional Amount:</strong> {notionalFmt}</div>
+                <div>● <strong>Price:</strong> {t.price ?? '—'}</div>
+                <div>● <strong>Strike/Coupon:</strong> {coupon} basis points ({couponPct}%)</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  ● <strong>Upfront Fee:</strong>
+                  <input
+                    className="no-print"
+                    value={confirmUpfront}
+                    onChange={e => setConfirmUpfront(e.target.value)}
+                    placeholder="enter PV..."
+                    style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
+                  />
+                  {confirmUpfront && <span className="print-only" style={{ display: 'none' }}>{confirmUpfront}</span>}
+                  <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
+                </div>
+                <div>● <strong>Upfront Fee Payable to:</strong> {t.price != null && t.price > 100 ? buyerInfo?.legal ?? buyerCode : sellerInfo?.legal ?? sellerCode}</div>
+              </div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Trade Type:</div>
+              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● Credit Default Swap (CDS)</div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Effective Date:</div>
+              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {tradeDate}</div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Maturity Date:</div>
+              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {maturity}</div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Reference Obligation:</div>
+              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {index}</div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Facilitation Fee:</div>
+              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● Charged by Crosspoint Capital: {facFee}</div>
+
+              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+
+              <div style={{ fontSize: '12px', color: '#444', marginBottom: '24px' }}>
+                This document serves as an official confirmation of the terms agreed upon between <strong>{buyerInfo?.legal ?? buyerCode}</strong> (as the Protection Buyer) and <strong>{sellerInfo?.legal ?? sellerCode}</strong> (as the Protection Seller) for the {index} tranche trade executed on <strong>{tradeDate}</strong>. All terms are subject to the provisions of the ISDA Master Agreement and related confirmations executed between the parties.
+              </div>
+
+              {/* Buttons */}
+              <div className="no-print" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button
+                  onClick={() => window.print()}
+                  style={{ background: '#2255aa', color: '#fff', border: 'none', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', letterSpacing: '1px' }}
+                >
+                  PRINT / SAVE PDF
+                </button>
+                <button
+                  onClick={() => setConfirmTrade(null)}
+                  style={{ background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif' }}
+                >
+                  CLOSE
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Trade log bar */}
       <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '15px', minHeight: '28px', display: 'flex', alignItems: 'center', gap: '8px', background: '#080808' }}>
