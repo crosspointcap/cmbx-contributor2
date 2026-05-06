@@ -1,0 +1,661 @@
+'use client'
+
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const DEALERS = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
+
+const DEALER_INACTIVE: Record<string, { bg: string; border: string; color: string }> = {
+  MS:   { bg: '#cc3333', border: '#ff6666', color: '#ffe0e0' },
+  BOA:  { bg: '#228822', border: '#55cc55', color: '#e0ffe0' },
+  CITI: { bg: '#882299', border: '#bb55cc', color: '#f0e0ff' },
+  JPM:  { bg: '#1155bb', border: '#4488ee', color: '#ddeeff' },
+  GS:   { bg: '#997700', border: '#ccaa00', color: '#fff0cc' },
+  UBS:  { bg: '#992255', border: '#cc4488', color: '#ffe0ee' },
+  BNP:  { bg: '#333399', border: '#6666cc', color: '#e0e0ff' },
+  DB:   { bg: '#116688', border: '#2299bb', color: '#cceeff' },
+  BARC: { bg: '#884400', border: '#bb6622', color: '#ffe8cc' },
+}
+
+const DEALER_SELECTED: Record<string, { bg: string; outline: string; color: string }> = {
+  MS:   { bg: '#ff5555', outline: '#ff5555', color: '#fff' },
+  BOA:  { bg: '#44dd44', outline: '#44dd44', color: '#fff' },
+  CITI: { bg: '#bb55ee', outline: '#bb55ee', color: '#fff' },
+  JPM:  { bg: '#3388ff', outline: '#3388ff', color: '#fff' },
+  GS:   { bg: '#eebb00', outline: '#eebb00', color: '#fff' },
+  UBS:  { bg: '#ee4499', outline: '#ee4499', color: '#fff' },
+  BNP:  { bg: '#6666ff', outline: '#6666ff', color: '#fff' },
+  DB:   { bg: '#11aacc', outline: '#11aacc', color: '#fff' },
+  BARC: { bg: '#dd7722', outline: '#dd7722', color: '#fff' },
+}
+
+const DEALER_TAG: Record<string, { color: string; bg: string }> = Object.fromEntries(
+  Object.entries(DEALER_INACTIVE).map(([k, v]) => [k, { color: v.color, bg: v.bg }])
+)
+
+type EditField = 'bid' | 'ask' | 'bid_size' | 'ask_size'
+
+interface Price {
+  series_number: string
+  tranche_name: string
+  bid: number | null
+  ask: number | null
+  bid_size: number | null
+  ask_size: number | null
+  bid_dealer: string | null
+  ask_dealer: string | null
+  last_trade_px: number | null
+  last_trade_time: string | null
+  mode: string
+}
+
+interface SeriesConfig {
+  series_number: string
+  label: string
+  sort_order: number | null
+}
+
+interface TrancheConfig {
+  tranche_name: string
+  sort_order: number
+}
+
+interface TradeLog {
+  time: string
+  action: 'HIT' | 'LIFT'
+  series: string
+  tranche: string
+  dealer: string
+  price: number | null
+}
+
+function fmtTime(ts: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(new Date(ts))
+}
+
+function nowET() {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(new Date())
+}
+
+const inputStyle: React.CSSProperties = {
+  background: '#1a1a00',
+  border: '1px solid #f0c040',
+  color: '#fff',
+  fontFamily: 'Courier New, monospace',
+  fontSize: '15px',
+  width: '55px',
+  outline: 'none',
+  padding: '1px 3px',
+}
+
+async function handleSignOut() {
+  await supabase.auth.signOut()
+  window.location.href = '/login'
+}
+
+export default function BackendPage() {
+  const [authChecked, setAuthChecked] = useState(false)
+  const [clock, setClock] = useState('')
+  const [agentOnline, setAgentOnline] = useState(false)
+  const [series, setSeries] = useState<SeriesConfig[]>([])
+  const [tranches, setTranches] = useState<TrancheConfig[]>([])
+  const [prices, setPrices] = useState<Record<string, Price>>({})
+  const [selectedDealer, setSelectedDealer] = useState<string | null>(null)
+  const [selectedRow, setSelectedRow] = useState<string | null>(null)
+  const [priceMode, setPriceMode] = useState<'spread' | 'price'>('spread')
+  const [editingCell, setEditingCell] = useState<{ key: string; field: EditField } | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
+  const [hitShake, setHitShake] = useState(false)
+  const [liftShake, setLiftShake] = useState(false)
+  const [cellError, setCellError] = useState('')
+  const [tradeLog, setTradeLog] = useState<TradeLog | null>(null)
+  const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
+
+  const selectedDealerRef = useRef(selectedDealer)
+  const selectedRowRef = useRef(selectedRow)
+  const priceModeRef = useRef(priceMode)
+  selectedDealerRef.current = selectedDealer
+  selectedRowRef.current = selectedRow
+  priceModeRef.current = priceMode
+
+  // Auth check
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        window.location.href = '/login'
+        return
+      }
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+
+      if (!prof || prof.role !== 'trader') {
+        window.location.href = '/dashboard/market'
+        return
+      }
+      setAuthChecked(true)
+    }
+    checkAuth()
+  }, [])
+
+  useEffect(() => {
+    const tick = () => setClock(nowET())
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    if (!authChecked) return
+    let cancelled = false
+
+    const ch = supabase
+      .channel(`backend-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'prices' }, (payload) => {
+        const p = payload.new as Price
+        setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
+        const t = payload.new as { series_number: string; tranche_name: string; side: string; price: number | null; dealer: string; created_at: string }
+        const key = `${t.series_number}:${t.tranche_name}`
+        flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
+        setTradeLog({
+          time: fmtTime(t.created_at),
+          action: t.side === 'hit' ? 'HIT' : 'LIFT',
+          series: t.series_number,
+          tranche: t.tranche_name,
+          dealer: t.dealer,
+          price: t.price,
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_heartbeat' }, (payload) => {
+        const hb = payload.new as { bbg_connected?: boolean; active?: boolean }
+        setAgentOnline(hb.bbg_connected ?? hb.active ?? false)
+      })
+      .subscribe()
+
+    async function loadData() {
+      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }] = await Promise.all([
+        supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
+        supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
+        supabase.from('prices').select('*'),
+        supabase.from('agent_heartbeat').select('*').limit(1).single(),
+      ])
+      if (cancelled) return
+      if (sd) setSeries(sd)
+      if (td) setTranches(td)
+      if (pd) {
+        const map: Record<string, Price> = {}
+        for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
+        setPrices(map)
+      }
+      if (hb) setAgentOnline((hb as { bbg_connected?: boolean; active?: boolean }).bbg_connected ?? (hb as { bbg_connected?: boolean; active?: boolean }).active ?? false)
+    }
+
+    loadData()
+    return () => { cancelled = true; supabase.removeChannel(ch) }
+  }, [authChecked])
+
+  function flashRowEffect(key: string, color: 'red' | 'green') {
+    let count = 0
+    const id = setInterval(() => {
+      setFlashRows(prev => {
+        if (key in prev) {
+          const next = { ...prev }
+          delete next[key]
+          return next
+        }
+        return { ...prev, [key]: color }
+      })
+      count++
+      if (count >= 6) clearInterval(id)
+    }, 250)
+  }
+
+  function handleDealerClick(code: string) {
+    setSelectedDealer(prev => prev === code ? null : code)
+  }
+
+  async function commitCell(key: string, field: EditField, value: string) {
+    const [seriesNum, trancheName] = key.split(':')
+    const dealer = selectedDealerRef.current
+    const update: Record<string, unknown> = {
+      series_number: seriesNum,
+      tranche_name: trancheName,
+      mode: priceModeRef.current,
+      [field]: value === '' ? null : value,
+    }
+    if (field === 'bid' && dealer) update.bid_dealer = dealer
+    if (field === 'ask' && dealer) update.ask_dealer = dealer
+    await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
+    setEditingCell(null)
+  }
+
+  async function clearAllPrices() {
+    await supabase.from('prices').delete().neq('series_number', '')
+    setPrices({})
+    setTradeLog(null)
+    setSelectedRow(null)
+    setConfirmClear(false)
+  }
+
+  function showError(msg: string) {
+    setCellError(msg)
+    setTimeout(() => setCellError(''), 3000)
+  }
+
+  async function executeHit() {
+    const dealer = selectedDealerRef.current
+    const rowKey = selectedRowRef.current
+    if (!dealer) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('Select a counterparty first'); return }
+    if (!rowKey) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('Select a row first'); return }
+    const [seriesNum, trancheName] = rowKey.split(':')
+    const px = prices[rowKey]?.bid ?? null
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer })
+    await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
+    flashRowEffect(rowKey, 'red')
+  }
+
+  async function executeLift() {
+    const dealer = selectedDealerRef.current
+    const rowKey = selectedRowRef.current
+    if (!dealer) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('Select a counterparty first'); return }
+    if (!rowKey) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('Select a row first'); return }
+    const [seriesNum, trancheName] = rowKey.split(':')
+    const px = prices[rowKey]?.ask ?? null
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer })
+    await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
+    flashRowEffect(rowKey, 'green')
+  }
+
+  function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties) {
+    const isEditing = editingCell?.key === key && editingCell.field === field
+    const isHovered = hoveredCell?.key === key && hoveredCell.field === field
+    const price = prices[key]
+    const rawVal = field === 'bid' ? price?.bid : field === 'ask' ? price?.ask : field === 'bid_size' ? price?.bid_size : price?.ask_size
+    const isEmpty = rawVal == null
+
+    const cellBg = isEditing ? '#1a1a00' : isHovered ? '#141408' : 'transparent'
+    const cellBorder = isEditing
+      ? '1px solid #f0c040'
+      : isHovered
+      ? '1px solid #555500'
+      : '1px solid transparent'
+
+    return (
+      <td
+        style={{ ...tdStyle, cursor: 'text', background: cellBg, border: cellBorder, position: 'relative' }}
+        onClick={e => {
+          e.stopPropagation()
+          setEditingCell({ key, field })
+          setEditValue(rawVal != null ? String(rawVal) : '')
+        }}
+        onMouseEnter={() => setHoveredCell({ key, field })}
+        onMouseLeave={() => setHoveredCell(null)}
+      >
+        {isEditing ? (
+          <input
+            autoFocus
+            value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitCell(key, field, editValue)
+              if (e.key === 'Escape') setEditingCell(null)
+            }}
+            onBlur={() => setEditingCell(null)}
+            style={inputStyle}
+          />
+        ) : isEmpty && isHovered ? (
+          <span style={{ color: '#555', fontStyle: 'italic', fontSize: '15px' }}>type...</span>
+        ) : displayValue}
+      </td>
+    )
+  }
+
+  if (!authChecked) {
+    return (
+      <div style={{ background: '#0a0a0a', color: '#444', fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        AUTHENTICATING...
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes shake {
+          0%,100%{transform:translateX(0)}
+          20%{transform:translateX(-4px)}
+          40%{transform:translateX(4px)}
+          60%{transform:translateX(-4px)}
+          80%{transform:translateX(4px)}
+        }
+      `}</style>
+
+      {/* Top bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
+        <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
+          CMBX CONTRIBUTOR — CROSSPOINT CAPITAL
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ color: '#444', fontSize: '15px' }}>{clock}</span>
+          <span style={{
+            background: '#1a1200',
+            color: '#f0c040',
+            border: '1px solid #f0c040',
+            fontSize: '13px',
+            fontWeight: 700,
+            letterSpacing: '2px',
+            padding: '1px 8px',
+            borderRadius: '2px',
+          }}>
+            ADMIN
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: agentOnline ? '#66ff88' : '#444', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ color: '#555', fontSize: '13px' }}>AGENT</span>
+          </span>
+          <a href="/dashboard/market" style={{ color: '#555', fontSize: '15px', border: '1px solid #2a2a2a', padding: '2px 8px', textDecoration: 'none', borderRadius: '2px' }}>
+            MARKET
+          </a>
+          <button
+            onClick={handleSignOut}
+            style={{
+              background: 'transparent',
+              color: '#555',
+              border: '1px solid #2a2a2a',
+              padding: '2px 8px',
+              fontSize: '15px',
+              fontFamily: 'Courier New, monospace',
+              cursor: 'pointer',
+              borderRadius: '2px',
+            }}
+          >
+            SIGN OUT
+          </button>
+        </div>
+      </div>
+
+      {/* Dealer buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', gap: '4px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
+        {DEALERS.map(code => (
+          <button
+            key={code}
+            onClick={() => handleDealerClick(code)}
+            style={selectedDealer === code ? {
+              background: DEALER_SELECTED[code]?.bg,
+              color: DEALER_SELECTED[code]?.color ?? '#fff',
+              border: '1px solid #fff',
+              outline: `2px solid ${DEALER_SELECTED[code]?.outline}`,
+              padding: '4px 14px',
+              fontSize: '15px',
+              fontFamily: 'Courier New, monospace',
+              fontWeight: 500,
+              borderRadius: '2px',
+              cursor: 'pointer',
+            } : {
+              background: DEALER_INACTIVE[code]?.bg,
+              color: DEALER_INACTIVE[code]?.color,
+              border: `1px solid ${DEALER_INACTIVE[code]?.border}`,
+              padding: '4px 14px',
+              fontSize: '15px',
+              fontFamily: 'Courier New, monospace',
+              fontWeight: 500,
+              borderRadius: '2px',
+              cursor: 'pointer',
+            }}
+          >
+            {code}
+          </button>
+        ))}
+        <span style={{ marginLeft: '10px', fontSize: '15px', color: selectedDealer ? '#f0c040' : '#444' }}>
+          {selectedDealer ? `SELECTED: ${selectedDealer}` : '— no counterparty selected'}
+        </span>
+        {cellError && (
+          <span style={{ marginLeft: '12px', color: '#ff4444', fontSize: '15px' }}>{cellError}</span>
+        )}
+      </div>
+
+      {/* Action row */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', gap: '6px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
+        <button
+          onClick={executeHit}
+          style={{
+            background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333',
+            padding: '3px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace',
+            borderRadius: '2px', cursor: 'pointer', fontWeight: 700,
+            animation: hitShake ? 'shake 0.5s ease' : 'none',
+          }}
+        >
+          HIT
+        </button>
+        <button
+          onClick={executeLift}
+          style={{
+            background: '#003a00', color: '#66ff88', border: '1px solid #338833',
+            padding: '3px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace',
+            borderRadius: '2px', cursor: 'pointer', fontWeight: 700,
+            animation: liftShake ? 'shake 0.5s ease' : 'none',
+          }}
+        >
+          LIFT
+        </button>
+        <div style={{ display: 'flex', gap: '2px', marginLeft: '10px' }}>
+          {(['spread', 'price'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setPriceMode(m)}
+              style={{
+                background: priceMode === m ? '#f0c040' : '#111',
+                color: priceMode === m ? '#000' : '#555',
+                border: `1px solid ${priceMode === m ? '#f0c040' : '#2a2a2a'}`,
+                padding: '2px 10px', fontSize: '15px', fontFamily: 'Courier New, monospace',
+                borderRadius: '2px', cursor: 'pointer', textTransform: 'uppercase' as const,
+                fontWeight: priceMode === m ? 700 : 400,
+              }}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+        <span style={{ color: '#444', fontSize: '15px', marginLeft: '10px' }}>
+          entering: <span style={{ color: '#888' }}>{priceMode === 'spread' ? 'SPREAD (bps)' : 'PRICE ($)'}</span>
+        </span>
+        <span style={{ color: '#333', fontSize: '15px', marginLeft: 'auto', paddingRight: '2px' }}>
+          hover a BID / ASK / SIZE cell → click → type → Enter to save
+        </span>
+
+        {!confirmClear ? (
+          <button
+            onClick={() => setConfirmClear(true)}
+            style={{
+              background: 'transparent', color: '#444', border: '1px solid #2a2a2a',
+              padding: '3px 12px', fontSize: '15px', fontFamily: 'Courier New, monospace',
+              borderRadius: '2px', cursor: 'pointer', marginLeft: '8px',
+            }}
+          >
+            CLEAR ALL
+          </button>
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px' }}>
+            <span style={{ color: '#ff4444', fontSize: '15px' }}>clear all prices?</span>
+            <button
+              onClick={clearAllPrices}
+              style={{
+                background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333',
+                padding: '3px 12px', fontSize: '15px', fontFamily: 'Courier New, monospace',
+                borderRadius: '2px', cursor: 'pointer', fontWeight: 700,
+              }}
+            >
+              YES
+            </button>
+            <button
+              onClick={() => setConfirmClear(false)}
+              style={{
+                background: '#111', color: '#555', border: '1px solid #2a2a2a',
+                padding: '3px 12px', fontSize: '15px', fontFamily: 'Courier New, monospace',
+                borderRadius: '2px', cursor: 'pointer',
+              }}
+            >
+              NO
+            </button>
+          </span>
+        )}
+      </div>
+
+      {/* Grid */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
+          <thead>
+            <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+              <th style={{ textAlign: 'left', padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 400 }}>TRANCHE</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 400 }}>BID</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 400 }}>ASK</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>SIZE</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>SIZE</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 400 }}>LST TRADE PX</th>
+              <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 400 }}>CHG</th>
+            </tr>
+          </thead>
+          <tbody>
+            {series.map(s => (
+              <Fragment key={s.series_number}>
+                <tr>
+                  <td
+                    colSpan={7}
+                    style={{
+                      padding: '8px 12px 5px 10px',
+                      color: '#f0c040',
+                      background: '#0e0e0e',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      letterSpacing: '1px',
+                      borderBottom: '1px solid #1e1e1e',
+                      borderTop: '1px solid #1a1a1a',
+                      borderLeft: '2px solid #f0c040',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span>CMBX.{s.series_number}</span>
+                      <span style={{ color: '#555', fontSize: '10px', fontWeight: 400, letterSpacing: '0px' }}>
+                        {tranches.filter(t => {
+                          const p = prices[`${s.series_number}:${t.tranche_name}`]
+                          return p?.bid != null || p?.ask != null
+                        }).length} live prices
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+                {tranches.map((t, tIdx) => {
+                  const rowKey = `${s.series_number}:${t.tranche_name}`
+                  const price = prices[rowKey]
+                  const isActive = selectedRow === rowKey
+                  const flash = flashRows[rowKey]
+                  const isOdd = tIdx % 2 === 1
+
+                  let rowBg = isActive ? '#1a1500' : isOdd ? '#0d0d0d' : 'transparent'
+                  if (flash === 'red') rowBg = '#3a0000'
+                  if (flash === 'green') rowBg = '#003a00'
+
+                  const bidTag = price?.bid_dealer && DEALER_TAG[price.bid_dealer] ? DEALER_TAG[price.bid_dealer] : null
+                  const askTag = price?.ask_dealer && DEALER_TAG[price.ask_dealer] ? DEALER_TAG[price.ask_dealer] : null
+
+                  const bidCell = (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
+                      <span style={{ color: price?.bid != null ? '#66ff88' : '#2a2a2a' }}>
+                        {price?.bid != null ? String(price.bid) : '—'}
+                      </span>
+                      {price?.bid != null && bidTag && (
+                        <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
+                          {price.bid_dealer}
+                        </span>
+                      )}
+                    </span>
+                  )
+
+                  const askCell = (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
+                      <span style={{ color: price?.ask != null ? '#ff6666' : '#2a2a2a' }}>
+                        {price?.ask != null ? String(price.ask) : '—'}
+                      </span>
+                      {price?.ask != null && askTag && (
+                        <span style={{ background: askTag.bg, color: askTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
+                          {price.ask_dealer}
+                        </span>
+                      )}
+                    </span>
+                  )
+
+                  const bszCell = <span style={{ color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.bid_size != null ? String(price.bid_size) : '—'}</span>
+                  const aszCell = <span style={{ color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.ask_size != null ? String(price.ask_size) : '—'}</span>
+
+                  return (
+                    <tr
+                      key={rowKey}
+                      onClick={() => setSelectedRow(prev => prev === rowKey ? null : rowKey)}
+                      style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
+                    >
+                      <td style={{ padding: '6px 8px 6px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
+                        CMBX.{s.series_number}.{t.tranche_name}
+                      </td>
+                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'right', padding: '6px 10px', borderLeft: '2px solid #1a3a1a' })}
+                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'right', padding: '6px 10px', borderLeft: '2px solid #3a1a1a' })}
+                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'right', padding: '6px 8px' })}
+                      {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'right', padding: '6px 8px' })}
+                      <td style={{ textAlign: 'right', padding: '6px 10px' }}>
+                        {price?.last_trade_px != null ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
+                            <span style={{ color: '#888' }}>{String(price.last_trade_px)}</span>
+                            {price.last_trade_time && (
+                              <span style={{ color: '#444', fontSize: '10px' }}>{fmtTime(price.last_trade_time)}</span>
+                            )}
+                          </div>
+                        ) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '6px 12px 6px 8px', color: '#2a2a2a' }}>—</td>
+                    </tr>
+                  )
+                })}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Trade log bar */}
+      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '15px', minHeight: '28px', display: 'flex', alignItems: 'center', gap: '8px', background: '#080808' }}>
+        {tradeLog ? (
+          <>
+            <span style={{ color: '#444' }}>[{tradeLog.time}]</span>
+            <span style={{ color: tradeLog.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700 }}>{tradeLog.action}</span>
+            <span style={{ color: '#666' }}>— CMBX.{tradeLog.series}.{tradeLog.tranche}</span>
+            <span style={{ color: '#444' }}>{tradeLog.action === 'HIT' ? 'SOLD TO' : 'BOUGHT FROM'}</span>
+            <span style={{ color: '#f0c040' }}>{tradeLog.dealer}</span>
+            <span style={{ color: '#444' }}>@</span>
+            <span style={{ color: '#bbb' }}>{tradeLog.price ?? '—'}</span>
+            <span style={{ color: '#333' }}>▶</span>
+            <span style={{ color: '#66ff88' }}>BLOTTER ✓</span>
+          </>
+        ) : (
+          <span style={{ color: '#2a2a2a' }}>— no trades this session</span>
+        )}
+      </div>
+    </div>
+  )
+}

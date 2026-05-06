@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+body {
+  background: #0a0a0a;
+  color: #cccccc;
+}
+
+@keyframes shake {
+  0% { transform: translateX(0); }
+  10% { transform: translateX(-4px); }
+  20% { transform: translateX(4px); }
+  30% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  50% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+  70% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+  90% { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes flash-red {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(255, 102, 102, 0.3); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-green {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(102, 255, 136, 0.3); }
+  100% { background-color: transparent; }
+}
+
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}
+
+.flash-red {
+  animation: flash-red 0.84s ease-in-out;
+}
+
+.flash-green {
+  animation: flash-green 0.84s ease-in-out;
+}
+
+/* Thin dark scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222222;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #333333;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #222222 #0a0a0a;
+}
