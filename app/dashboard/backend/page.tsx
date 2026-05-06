@@ -10,6 +10,15 @@ const supabase = createClient(
 
 const DEALERS = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
 
+const DEFAULT_SIZE: Record<string, number> = {
+  AAA:   25,
+  AS:     5,
+  AA:     5,
+  A:      5,
+  'BBB-': 5,
+  BB:     5,
+}
+
 const DEALER_INACTIVE: Record<string, { bg: string; border: string; color: string }> = {
   MS:   { bg: '#cc3333', border: '#ff6666', color: '#ffe0e0' },
   BOA:  { bg: '#228822', border: '#55cc55', color: '#e0ffe0' },
@@ -263,6 +272,7 @@ export default function BackendPage() {
   async function commitCell(key: string, field: EditField, value: string) {
     const [seriesNum, trancheName] = key.split(':')
     const dealer = selectedDealerRef.current
+    const existing = prices[key]
     const update: Record<string, unknown> = {
       series_number: seriesNum,
       tranche_name: trancheName,
@@ -271,6 +281,12 @@ export default function BackendPage() {
     }
     if (field === 'bid' && dealer) update.bid_dealer = dealer
     if (field === 'ask' && dealer) update.ask_dealer = dealer
+
+    // Auto-fill default size if entering a price and size is currently empty
+    const defSize = DEFAULT_SIZE[trancheName] ?? 5
+    if (field === 'bid' && value !== '' && existing?.bid_size == null) update.bid_size = defSize
+    if (field === 'ask' && value !== '' && existing?.ask_size == null) update.ask_size = defSize
+
     await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
     setEditingCell(null)
   }
