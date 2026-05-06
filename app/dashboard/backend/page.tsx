@@ -123,6 +123,16 @@ export default function BackendPage() {
   const [tradeLog, setTradeLog] = useState<TradeLog | null>(null)
   const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
+
+  function toggleCollapse(seriesNum: string) {
+    setCollapsedSeries(prev => {
+      const next = new Set(prev)
+      if (next.has(seriesNum)) next.delete(seriesNum)
+      else next.add(seriesNum)
+      return next
+    })
+  }
 
   const selectedDealerRef = useRef(selectedDealer)
   const selectedRowRef = useRef(selectedRow)
@@ -525,18 +535,24 @@ export default function BackendPage() {
           <thead>
             <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
               <th style={{ textAlign: 'left', padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 400 }}>TRANCHE</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>SIZE</th>
               <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 400 }}>BID</th>
               <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 400 }}>OFFER</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>SIZE</th>
               <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>SIZE</th>
               <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 400 }}>LST TRADE PX</th>
               <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 400 }}>CHG</th>
             </tr>
           </thead>
           <tbody>
-            {series.map(s => (
+            {series.map(s => {
+              const isCollapsed = collapsedSeries.has(s.series_number)
+              const liveCount = tranches.filter(t => {
+                const p = prices[`${s.series_number}:${t.tranche_name}`]
+                return p?.bid != null || p?.ask != null
+              }).length
+              return (
               <Fragment key={s.series_number}>
-                <tr>
+                <tr onClick={() => toggleCollapse(s.series_number)} style={{ cursor: 'pointer' }}>
                   <td
                     colSpan={7}
                     style={{
@@ -552,17 +568,17 @@ export default function BackendPage() {
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <span>CMBX.{s.series_number}</span>
+                      <span>
+                        <span style={{ fontSize: '11px', marginRight: '8px', color: '#f0c040' }}>{isCollapsed ? '▶' : '▼'}</span>
+                        CMBX.{s.series_number}
+                      </span>
                       <span style={{ color: '#555', fontSize: '10px', fontWeight: 400, letterSpacing: '0px' }}>
-                        {tranches.filter(t => {
-                          const p = prices[`${s.series_number}:${t.tranche_name}`]
-                          return p?.bid != null || p?.ask != null
-                        }).length} live prices
+                        {liveCount} live prices
                       </span>
                     </div>
                   </td>
                 </tr>
-                {tranches.map((t, tIdx) => {
+                {!isCollapsed && tranches.map((t, tIdx) => {
                   const rowKey = `${s.series_number}:${t.tranche_name}`
                   const price = prices[rowKey]
                   const isActive = selectedRow === rowKey
@@ -614,9 +630,9 @@ export default function BackendPage() {
                       <td style={{ padding: '6px 8px 6px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
                         CMBX.{s.series_number}.{t.tranche_name}
                       </td>
+                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'right', padding: '6px 8px' })}
                       {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'right', padding: '6px 10px', borderLeft: '2px solid #1a3a1a' })}
                       {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'right', padding: '6px 10px', borderLeft: '2px solid #3a1a1a' })}
-                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'right', padding: '6px 8px' })}
                       {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'right', padding: '6px 8px' })}
                       <td style={{ textAlign: 'right', padding: '6px 10px' }}>
                         {price?.last_trade_px != null ? (
@@ -633,7 +649,8 @@ export default function BackendPage() {
                   )
                 })}
               </Fragment>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

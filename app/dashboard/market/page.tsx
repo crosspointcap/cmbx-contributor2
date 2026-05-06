@@ -64,6 +64,16 @@ export default function MarketPage() {
   const [prices,       setPrices]       = useState<Record<string, Price>>({})
   const [flashRows,    setFlashRows]    = useState<Record<string, 'red' | 'green'>>({})
   const [lastTrade,    setLastTrade]    = useState<{ series: string; tranche: string; price: number | null; time: string } | null>(null)
+  const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
+
+  function toggleCollapse(seriesNum: string) {
+    setCollapsedSeries(prev => {
+      const next = new Set(prev)
+      if (next.has(seriesNum)) next.delete(seriesNum)
+      else next.add(seriesNum)
+      return next
+    })
+  }
 
   // ── Auth check ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -199,13 +209,17 @@ export default function MarketPage() {
               })
               if (liveTranches.length === 0) return null
 
+              const isCollapsed = collapsedSeries.has(s.series_number)
               return (
                 <Fragment key={s.series_number}>
                   {/* Series header */}
-                  <tr>
+                  <tr onClick={() => toggleCollapse(s.series_number)} style={{ cursor: 'pointer' }}>
                     <td colSpan={6} style={{ padding: '8px 12px 5px 10px', color: '#f0c040', background: '#0c0c0c', fontSize: '15px', fontWeight: 600, letterSpacing: '1px', borderBottom: '1px solid #1e1e1e', borderTop: '1px solid #1a1a1a', borderLeft: '2px solid #f0c040' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                        <span>CMBX.{s.series_number}</span>
+                        <span>
+                          <span style={{ fontSize: '11px', marginRight: '8px', color: '#f0c040' }}>{isCollapsed ? '▶' : '▼'}</span>
+                          CMBX.{s.series_number}
+                        </span>
                         <span style={{ color: '#555', fontSize: '10px', fontWeight: 400 }}>
                           {liveTranches.length} {liveTranches.length === 1 ? 'price' : 'prices'}
                         </span>
@@ -213,7 +227,7 @@ export default function MarketPage() {
                     </td>
                   </tr>
 
-                  {liveTranches.map((t, tIdx) => {
+                  {!isCollapsed && liveTranches.map((t, tIdx) => {
                     const rowKey = `${s.series_number}:${t.tranche_name}`
                     const price  = prices[rowKey]
                     const flash  = flashRows[rowKey]
