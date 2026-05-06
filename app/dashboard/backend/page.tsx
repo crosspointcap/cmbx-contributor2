@@ -19,6 +19,15 @@ const DEFAULT_SIZE: Record<string, number> = {
   BB:     5,
 }
 
+const FACILITATION_FEE_PER_MM: Record<string, number> = {
+  AAA:    75,
+  AS:    115,
+  AA:    115,
+  A:     115,
+  'BBB-':125,
+  BB:    125,
+}
+
 const COUPON_BPS: Record<string, number> = {
   AAA:    50,
   AS:    100,
@@ -842,7 +851,8 @@ export default function BackendPage() {
         const notionalFmt = notional ? `$${notional.toLocaleString()}` : '—'
         const maturity = MATURITY_DATE[t.series] ?? '—'
         const index = `CMBX.NA.${t.tranche}.${t.series}`
-        const facFee = notional ? `$${(notional / 1_000_000 * 115).toLocaleString()}` : '—'
+        const feePerMM = FACILITATION_FEE_PER_MM[t.tranche] ?? 115
+        const facFee = notional ? `$${(notional / 1_000_000 * feePerMM).toLocaleString()}` : '—'
 
         // HIT: dealer = Protection Buyer (Seller of Risk), passive = Protection Seller (Buyer of Risk)
         // LIFT: dealer = Protection Seller (Buyer of Risk), passive = Protection Buyer (Seller of Risk)
