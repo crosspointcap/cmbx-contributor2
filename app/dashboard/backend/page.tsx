@@ -287,8 +287,17 @@ export default function BackendPage() {
     const ch = supabase
       .channel(`backend-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prices' }, (payload) => {
-        const p = payload.new as Price
-        setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
+        if (payload.eventType === 'DELETE') {
+          const p = payload.old as Price
+          setPrices(prev => {
+            const next = { ...prev }
+            delete next[`${p.series_number}:${p.tranche_name}`]
+            return next
+          })
+        } else {
+          const p = payload.new as Price
+          setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
+        }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const t = payload.new as { id: string; series_number: string; tranche_name: string; side: string; price: number | null; dealer: string; created_at: string }
