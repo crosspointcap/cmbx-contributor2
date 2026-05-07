@@ -393,7 +393,12 @@ export default function BackendPage() {
   }
 
   async function clearAllPrices() {
-    await supabase.from('prices').delete().neq('series_number', '')
+    await supabase.from('prices').update({
+      bid: null, ask: null,
+      bid_size: null, ask_size: null,
+      bid_dealer: null, ask_dealer: null,
+      last_trade_px: null, last_trade_time: null,
+    }).neq('series_number', '')
     setPrices({})
     setTradeLog(null)
     setSelectedRow(null)
