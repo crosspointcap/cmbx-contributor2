@@ -152,14 +152,14 @@ export default function MarketPage() {
       <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
-            <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-              <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1e1e1e', width: '130px', fontWeight: 400 }}>TRANCHE</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>BID</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>ASK</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>B.SZ</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>A.SZ</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>LAST PX</th>
-              <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '80px', fontWeight: 400 }}>TIME</th>
+            <tr style={{ color: '#ddd', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+              <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1e1e1e', width: '130px', fontWeight: 700 }}>TRANCHE</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>BID</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>ASK</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 700 }}>B.SZ</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 700 }}>A.SZ</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>LAST PX</th>
+              <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '80px', fontWeight: 700 }}>TIME</th>
             </tr>
           </thead>
           <tbody>
@@ -198,10 +198,10 @@ export default function MarketPage() {
                     if (flash === 'green') rowBg = '#003a00'
 
                     const bidColor = price?.bid != null
-                      ? (myCode && price.bid_dealer === myCode ? '#4488ff' : '#66ff88')
+                      ? (myCode && price.bid_dealer === myCode ? '#4488ff' : '#ffffff')
                       : '#2a2a2a'
                     const askColor = price?.ask != null
-                      ? (myCode && price.ask_dealer === myCode ? '#4488ff' : '#ff6666')
+                      ? (myCode && price.ask_dealer === myCode ? '#4488ff' : '#ffffff')
                       : '#2a2a2a'
 
                     return (

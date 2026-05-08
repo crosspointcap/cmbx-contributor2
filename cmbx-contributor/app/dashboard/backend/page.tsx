@@ -461,7 +461,7 @@ export default function BackendPage() {
 
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
-                      <span style={{ color: price?.bid != null ? '#66ff88' : '#2a2a2a' }}>
+                      <span style={{ color: price?.bid != null ? '#ffffff' : '#2a2a2a' }}>
                         {price?.bid != null ? String(price.bid) : '—'}
                       </span>
                       {price?.bid != null && bidTag && (
@@ -474,7 +474,7 @@ export default function BackendPage() {
 
                   const askCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
-                      <span style={{ color: price?.ask != null ? '#ff6666' : '#2a2a2a' }}>
+                      <span style={{ color: price?.ask != null ? '#ffffff' : '#2a2a2a' }}>
                         {price?.ask != null ? String(price.ask) : '—'}
                       </span>
                       {price?.ask != null && askTag && (
