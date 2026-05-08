@@ -393,6 +393,11 @@ export default function BackendPage() {
     setEditingCell(null)
   }
 
+  async function deleteTrade(id: string) {
+    await supabase.from('trades').delete().eq('id', id)
+    setBlotterTrades(prev => prev.filter(t => t.id !== id))
+  }
+
   async function clearAllPrices() {
     await supabase.from('prices').update({
       bid: null, ask: null,
@@ -845,12 +850,21 @@ export default function BackendPage() {
                     <span style={{ color: '#f0c040', fontSize: '13px' }}>{t.dealer}</span>
                     <span style={{ color: '#888', fontSize: '13px' }}>@ {t.price ?? '—'}</span>
                   </div>
-                  <button
-                    onClick={() => { setConfirmTrade(t); setConfirmUpfront('') }}
-                    style={{ marginTop: '5px', width: '100%', background: '#0f0f00', color: '#f0c040', border: '1px solid #333300', padding: '2px 0', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', letterSpacing: '1px', borderRadius: '2px' }}
-                  >
-                    VIEW CONFIRM
-                  </button>
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
+                    <button
+                      onClick={() => { setConfirmTrade(t); setConfirmUpfront('') }}
+                      style={{ flex: 1, background: '#0f0f00', color: '#f0c040', border: '1px solid #333300', padding: '2px 0', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', letterSpacing: '1px', borderRadius: '2px' }}
+                    >
+                      VIEW CONFIRM
+                    </button>
+                    <button
+                      onClick={() => deleteTrade(t.id)}
+                      title="Delete trade"
+                      style={{ background: '#1a0000', color: '#663333', border: '1px solid #330000', padding: '2px 8px', fontSize: '13px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               ))
             )}
