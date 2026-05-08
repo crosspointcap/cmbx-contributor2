@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { NavTabs } from '../NavTabs'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -560,6 +561,9 @@ export default function BackendPage() {
           </button>
         </div>
       </div>
+
+      {/* Nav tabs */}
+      <NavTabs active="admin" isTrader={true} />
 
       {/* Dealer buttons */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', gap: '4px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>

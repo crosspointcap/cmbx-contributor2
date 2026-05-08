@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { NavTabs } from '../NavTabs'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,6 +26,9 @@ interface Profile {
   role: string
   dealer_code: string | null
 }
+
+// Note: traders can also view this page (read-only market view)
+// They are NOT redirected — they use the ADMIN tab to go back to backend.
 
 interface Price {
   series_number: string
@@ -87,8 +91,7 @@ export default function MarketPage() {
         .eq('id', session.user.id)
         .single()
 
-      if (!prof)                  { window.location.href = '/login';             return }
-      if (prof.role === 'trader') { window.location.href = '/dashboard/backend'; return }
+      if (!prof) { window.location.href = '/login'; return }
 
       setProfile(prof)
       setAuthChecked(true)
@@ -190,6 +193,9 @@ export default function MarketPage() {
           </button>
         </div>
       </div>
+
+      {/* Nav tabs */}
+      <NavTabs active="prices" isTrader={profile?.role === 'trader'} />
 
       {/* Grid — READ ONLY */}
       <div style={{ flex: 1, overflow: 'auto' }}>
