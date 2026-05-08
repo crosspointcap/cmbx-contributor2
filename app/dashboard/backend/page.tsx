@@ -425,6 +425,7 @@ export default function BackendPage() {
     const px = prices[rowKey]?.bid ?? null
     const passiveDealer = prices[rowKey]?.bid_dealer ?? null
     const sz = prices[rowKey]?.bid_size ?? null
+    if (dealer === passiveDealer) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError(`${dealer} cannot hit their own price`); return }
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'red')
@@ -439,6 +440,7 @@ export default function BackendPage() {
     const px = prices[rowKey]?.ask ?? null
     const passiveDealer = prices[rowKey]?.ask_dealer ?? null
     const sz = prices[rowKey]?.ask_size ?? null
+    if (dealer === passiveDealer) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError(`${dealer} cannot lift their own price`); return }
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'green')
