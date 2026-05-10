@@ -76,6 +76,16 @@ interface TradeLog {
   bbgPublished: boolean
 }
 
+interface TradeConfirm {
+  tranche: string
+  series: string
+  side: 'hit' | 'lift'
+  price: number | null
+  buyer: string
+  seller: string
+  time: string
+}
+
 function fmtTime(ts: string) {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -118,6 +128,7 @@ export default function BackendPage() {
   const [cellError, setCellError] = useState('')
   const [tradeLog, setTradeLog] = useState<TradeLog | null>(null)
   const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
+  const [tradeConfirm, setTradeConfirm] = useState<TradeConfirm | null>(null)
 
   const selectedDealerRef = useRef(selectedDealer)
   const selectedRowRef = useRef(selectedRow)
@@ -236,6 +247,7 @@ export default function BackendPage() {
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'red')
+    setTradeConfirm({ tranche: trancheName, series: seriesNum, side: 'hit', price: px, buyer: dealer, seller: 'CROSSPOINT', time: nowET() })
   }
 
   async function executeLift() {
@@ -248,6 +260,7 @@ export default function BackendPage() {
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'green')
+    setTradeConfirm({ tranche: trancheName, series: seriesNum, side: 'lift', price: px, buyer: 'CROSSPOINT', seller: dealer, time: nowET() })
   }
 
   function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties) {
@@ -513,6 +526,51 @@ export default function BackendPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Trade confirmation overlay */}
+      {tradeConfirm && (
+        <div
+          onClick={() => setTradeConfirm(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#0f0f0f', border: '1px solid #f0c040', padding: '28px 36px', minWidth: '340px', fontFamily: 'Courier New, monospace' }}
+          >
+            <div style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px', marginBottom: '20px', textAlign: 'center' }}>
+              TRADE CONFIRMATION
+            </div>
+            <div style={{ color: '#555', fontSize: '11px', marginBottom: '16px', textAlign: 'center' }}>
+              {tradeConfirm.time}
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff', textAlign: 'center', marginBottom: '20px', letterSpacing: '1px' }}>
+              CMBX.{tradeConfirm.series}.{tradeConfirm.tranche}
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: tradeConfirm.side === 'hit' ? '#ff6666' : '#66ff88', textAlign: 'center', marginBottom: '24px' }}>
+              {tradeConfirm.price ?? '—'} bps
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '32px', marginBottom: '28px' }}>
+              <div style={{ textAlign: 'center', flex: 1 }}>
+                <div style={{ color: '#555', fontSize: '10px', letterSpacing: '1px', marginBottom: '6px' }}>BUYER</div>
+                <div style={{ color: '#66ff88', fontSize: '15px', fontWeight: 700 }}>{tradeConfirm.buyer}</div>
+              </div>
+              <div style={{ color: '#333', fontSize: '20px', alignSelf: 'center' }}>→</div>
+              <div style={{ textAlign: 'center', flex: 1 }}>
+                <div style={{ color: '#555', fontSize: '10px', letterSpacing: '1px', marginBottom: '6px' }}>SELLER</div>
+                <div style={{ color: '#ff6666', fontSize: '15px', fontWeight: 700 }}>{tradeConfirm.seller}</div>
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <button
+                onClick={() => setTradeConfirm(null)}
+                style={{ background: '#f0c040', color: '#000', border: 'none', padding: '6px 24px', fontFamily: 'Courier New, monospace', fontSize: '12px', fontWeight: 700, cursor: 'pointer', letterSpacing: '1px' }}
+              >
+                DISMISS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Trade log bar */}
       <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '13px', minHeight: '28px', display: 'flex', alignItems: 'center', gap: '8px', background: '#080808' }}>
