@@ -119,7 +119,7 @@ export default function BackendPage() {
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [selectedDealer, setSelectedDealer] = useState<string | null>(null)
   const [selectedRow, setSelectedRow] = useState<string | null>(null)
-  const [priceMode, setPriceMode] = useState<'spread' | 'price'>('spread')
+  const [priceMode] = useState<'spread' | 'price'>('price')
   const [editingCell, setEditingCell] = useState<{ key: string; field: EditField } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
@@ -223,7 +223,7 @@ export default function BackendPage() {
     const update: Record<string, unknown> = {
       series_number: seriesNum,
       tranche_name: trancheName,
-      mode: priceModeRef.current,
+      mode: 'price',
       [field]: value === '' ? null : value,
     }
     if (field === 'bid' && dealer) update.bid_dealer = dealer
@@ -399,26 +399,8 @@ export default function BackendPage() {
         >
           LIFT
         </button>
-        <div style={{ display: 'flex', gap: '2px', marginLeft: '10px' }}>
-          {(['spread', 'price'] as const).map(m => (
-            <button
-              key={m}
-              onClick={() => setPriceMode(m)}
-              style={{
-                background: priceMode === m ? '#f0c040' : '#111',
-                color: priceMode === m ? '#000' : '#555',
-                border: `1px solid ${priceMode === m ? '#f0c040' : '#2a2a2a'}`,
-                padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace',
-                borderRadius: '2px', cursor: 'pointer', textTransform: 'uppercase' as const,
-                fontWeight: priceMode === m ? 700 : 400,
-              }}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
         <span style={{ color: '#444', fontSize: '13px', marginLeft: '10px' }}>
-          entering: <span style={{ color: '#888' }}>{priceMode === 'spread' ? 'SPREAD (bps)' : 'PRICE ($)'}</span>
+          entering: <span style={{ color: '#888' }}>PRICE ($)</span>
         </span>
         <span style={{ color: '#333', fontSize: '13px', marginLeft: 'auto', paddingRight: '2px' }}>
           hover a BID / ASK / B.SZ / A.SZ cell → click → type → Enter to save
@@ -547,7 +529,7 @@ export default function BackendPage() {
               CMBX.{tradeConfirm.series}.{tradeConfirm.tranche}
             </div>
             <div style={{ fontSize: '22px', fontWeight: 700, color: tradeConfirm.side === 'hit' ? '#ff6666' : '#66ff88', textAlign: 'center', marginBottom: '24px' }}>
-              {tradeConfirm.price ?? '—'} bps
+              ${tradeConfirm.price ?? '—'}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '32px', marginBottom: '28px' }}>
               <div style={{ textAlign: 'center', flex: 1 }}>
