@@ -244,6 +244,7 @@ export default function BackendPage() {
     if (!rowKey) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('Select a row first'); return }
     const [seriesNum, trancheName] = rowKey.split(':')
     const px = prices[rowKey]?.bid ?? null
+    if (px == null) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('No bid posted on this tranche'); return }
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'red')
@@ -257,6 +258,7 @@ export default function BackendPage() {
     if (!rowKey) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('Select a row first'); return }
     const [seriesNum, trancheName] = rowKey.split(':')
     const px = prices[rowKey]?.ask ?? null
+    if (px == null) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('No offer posted on this tranche'); return }
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, 'green')
