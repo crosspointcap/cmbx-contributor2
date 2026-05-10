@@ -1,0 +1,29 @@
+name: Hourly Market Data Pull
+
+on:
+  schedule:
+    # Mon–Fri 8am–6pm ET = 13:00–23:00 UTC
+    - cron: '0 13-23 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  pull-market-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Run market data fetcher
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/fetch_market_data.py

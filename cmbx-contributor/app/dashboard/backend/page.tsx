@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { NavTabs } from '../NavTabs'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -316,11 +317,10 @@ export default function BackendPage() {
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: bbgConnected ? '#66ff88' : '#444', display: 'inline-block', flexShrink: 0 }} />
             <span style={{ color: '#f0c040', fontSize: '13px', fontWeight: 600, letterSpacing: '1px' }}>BBG GPGX</span>
           </span>
-          <a href="/dashboard/market" style={{ color: '#555', fontSize: '13px', border: '1px solid #2a2a2a', padding: '2px 8px', textDecoration: 'none', borderRadius: '2px' }}>
-            MARKET
-          </a>
         </div>
       </div>
+
+      <NavTabs active="admin" isTrader={true} />
 
       {/* Dealer buttons */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', gap: '4px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { NavTabs } from '../NavTabs'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -142,11 +143,10 @@ export default function MarketPage() {
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
-          <a href="/dashboard/backend" style={{ color: '#555', fontSize: '13px', border: '1px solid #2a2a2a', padding: '2px 8px', textDecoration: 'none', borderRadius: '2px' }}>
-            BACKEND
-          </a>
         </div>
       </div>
+
+      <NavTabs active="prices" isTrader={false} />
 
       {/* Grid */}
       <div style={{ flex: 1, overflow: 'auto' }}>
