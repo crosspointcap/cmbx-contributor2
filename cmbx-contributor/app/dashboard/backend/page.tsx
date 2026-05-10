@@ -119,7 +119,7 @@ export default function BackendPage() {
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [selectedDealer, setSelectedDealer] = useState<string | null>(null)
   const [selectedRow, setSelectedRow] = useState<string | null>(null)
-  const [priceMode] = useState<'spread' | 'price'>('price')
+  const [priceMode, setPriceMode] = useState<'spread' | 'price'>('price')
   const [editingCell, setEditingCell] = useState<{ key: string; field: EditField } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
@@ -223,7 +223,7 @@ export default function BackendPage() {
     const update: Record<string, unknown> = {
       series_number: seriesNum,
       tranche_name: trancheName,
-      mode: 'price',
+      mode: priceModeRef.current,
       [field]: value === '' ? null : value,
     }
     if (field === 'bid' && dealer) update.bid_dealer = dealer
@@ -399,9 +399,24 @@ export default function BackendPage() {
         >
           LIFT
         </button>
-        <span style={{ color: '#444', fontSize: '13px', marginLeft: '10px' }}>
-          entering: <span style={{ color: '#888' }}>PRICE ($)</span>
-        </span>
+        <div style={{ display: 'flex', gap: '2px', marginLeft: '10px' }}>
+          {(['spread', 'price'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setPriceMode(m)}
+              style={{
+                background: priceMode === m ? '#f0c040' : '#111',
+                color: priceMode === m ? '#000' : '#555',
+                border: `1px solid ${priceMode === m ? '#f0c040' : '#2a2a2a'}`,
+                padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace',
+                borderRadius: '2px', cursor: 'pointer', textTransform: 'uppercase' as const,
+                fontWeight: priceMode === m ? 700 : 400,
+              }}
+            >
+              {m === 'spread' ? 'SPREAD' : 'PRICE $'}
+            </button>
+          ))}
+        </div>
         <span style={{ color: '#333', fontSize: '13px', marginLeft: 'auto', paddingRight: '2px' }}>
           hover a BID / ASK / B.SZ / A.SZ cell → click → type → Enter to save
         </span>
@@ -457,7 +472,7 @@ export default function BackendPage() {
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
                       <span style={{ color: price?.bid != null ? '#ffffff' : '#2a2a2a' }}>
-                        {price?.bid != null ? String(price.bid) : '—'}
+                        {price?.bid != null ? (priceMode === 'price' ? `$${price.bid}` : String(price.bid)) : '—'}
                       </span>
                       {price?.bid != null && bidTag && (
                         <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '13px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
@@ -470,7 +485,7 @@ export default function BackendPage() {
                   const askCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
                       <span style={{ color: price?.ask != null ? '#ffffff' : '#2a2a2a' }}>
-                        {price?.ask != null ? String(price.ask) : '—'}
+                        {price?.ask != null ? (priceMode === 'price' ? `$${price.ask}` : String(price.ask)) : '—'}
                       </span>
                       {price?.ask != null && askTag && (
                         <span style={{ background: askTag.bg, color: askTag.color, fontSize: '13px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
