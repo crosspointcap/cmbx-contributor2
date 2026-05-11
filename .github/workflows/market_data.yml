@@ -20,7 +20,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests supabase python-dotenv
+        run: pip install "requests" "supabase==2.10.0" "python-dotenv"
 
       - name: Run market data fetcher
         env:
