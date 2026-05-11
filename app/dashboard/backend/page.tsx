@@ -472,6 +472,10 @@ export default function BackendPage() {
         style={{ ...tdStyle, cursor: 'text', background: cellBg, border: cellBorder, position: 'relative' }}
         onClick={e => {
           e.stopPropagation()
+          if ((field === 'bid' || field === 'ask') && !selectedDealer) {
+            showError('Select a dealer before entering a price')
+            return
+          }
           setEditingCell({ key, field })
           setEditValue(rawVal != null ? String(rawVal) : '')
         }}
