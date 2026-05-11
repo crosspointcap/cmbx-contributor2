@@ -196,6 +196,30 @@ function nowET() {
   }).format(new Date())
 }
 
+// 32nds: "80-01" → 80.03125,  "80-16" → 80.5,  "80-31" → 80.96875
+function parse32nds(val: string): number | null {
+  const m = val.trim().match(/^(\d+)-(\d{1,2})$/)
+  if (!m) return null
+  const whole = parseInt(m[1], 10)
+  const ticks = parseInt(m[2], 10)
+  if (ticks > 31) return null
+  return whole + ticks / 32
+}
+
+// 80.03125 → "80-01",  80.5 → "80-16"
+function fmt32nds(n: number): string {
+  const whole = Math.floor(n)
+  const ticks = Math.round((n - whole) * 32)
+  return `${whole}-${ticks.toString().padStart(2, '0')}`
+}
+
+function formatPx(price: number | null | undefined, mode: string | undefined): string {
+  if (price == null) return '—'
+  if (mode === 'ticks') return fmt32nds(price)
+  if (mode === 'price') return `$${price}`
+  return String(price)
+}
+
 const inputStyle: React.CSSProperties = {
   background: '#1a1a00',
   border: '1px solid #f0c040',
@@ -399,41 +423,54 @@ export default function BackendPage() {
     const [seriesNum, trancheName] = key.split(':')
     const dealer = selectedDealerRef.current
     const existing = prices[key]
+
+    // Detect format: 32nds ("80-01"), dollar price ("$85.50"), or spread (plain number)
+    const trimmed = value.trim()
+    const is32nds  = /^\d+-\d{1,2}$/.test(trimmed)
+    const isDollar = trimmed.startsWith('$')
+    const mode     = is32nds ? 'ticks' : isDollar ? 'price' : 'spread'
+
+    let numericValue: number | null = null
+    if (trimmed !== '') {
+      if (is32nds)       numericValue = parse32nds(trimmed)
+      else if (isDollar) numericValue = parseFloat(trimmed.slice(1)) || null
+      else               numericValue = parseFloat(trimmed) || null
+    }
+
     const update: Record<string, unknown> = {
       series_number: seriesNum,
-      tranche_name: trancheName,
-      mode: value.trimStart().startsWith('$') ? 'price' : 'spread',
-      [field]: value === '' ? null : parseFloat(value.replace(/^\$/, '')) || value.replace(/^\$/, '') || null,
+      tranche_name:  trancheName,
+      mode,
+      [field]: numericValue,
     }
     if (field === 'bid' && dealer) update.bid_dealer = dealer
     if (field === 'ask' && dealer) update.ask_dealer = dealer
 
     // Auto-fill default size if entering a price and size is currently empty
     const defSize = DEFAULT_SIZE[trancheName] ?? 5
-    if (field === 'bid' && value !== '' && existing?.bid_size == null) update.bid_size = defSize
-    if (field === 'ask' && value !== '' && existing?.ask_size == null) update.ask_size = defSize
+    if (field === 'bid' && trimmed !== '' && existing?.bid_size == null) update.bid_size = defSize
+    if (field === 'ask' && trimmed !== '' && existing?.ask_size == null) update.ask_size = defSize
 
     await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
 
     // Log every bid/ask price entry to the audit table
-    if ((field === 'bid' || field === 'ask') && value !== '') {
-      const priceVal = parseFloat(value.replace(/^\$/, '')) || null
-      if (priceVal != null) {
-        const sz = field === 'bid'
-          ? (update.bid_size as number ?? existing?.bid_size ?? null)
-          : (update.ask_size as number ?? existing?.ask_size ?? null)
-        supabase.from('price_changes').insert({
-          series_number: seriesNum,
-          tranche_name:  trancheName,
-          dealer,
-          side:   field,
-          price:  priceVal,
-          size:   sz,
-          mode:   update.mode,
-          cdx_hy: latestCdxHyRef.current,
-          cdx_ig: latestCdxIgRef.current,
-        }).then(() => {}) // fire and forget
-      }
+    if ((field === 'bid' || field === 'ask') && trimmed !== '' && numericValue != null) {
+      const sz = field === 'bid'
+        ? (update.bid_size as number ?? existing?.bid_size ?? null)
+        : (update.ask_size as number ?? existing?.ask_size ?? null)
+      supabase.from('price_changes').insert({
+        series_number: seriesNum,
+        tranche_name:  trancheName,
+        dealer,
+        side:   field,
+        price:  numericValue,
+        size:   sz,
+        mode,
+        cdx_hy: latestCdxHyRef.current,
+        cdx_ig: latestCdxIgRef.current,
+      }).then(({ error }) => {
+        if (error) console.warn('[price_changes insert failed]', error.message)
+      })
     }
 
     setEditingCell(null)
@@ -549,7 +586,16 @@ export default function BackendPage() {
             return
           }
           setEditingCell({ key, field })
-          setEditValue(rawVal != null ? String(rawVal) : '')
+          // Pre-populate in the correct display format
+          const px = prices[key]
+          const pxMode = px?.mode
+          if (rawVal != null && (field === 'bid' || field === 'ask')) {
+            if (pxMode === 'ticks')  setEditValue(fmt32nds(rawVal))
+            else if (pxMode === 'price') setEditValue(`$${rawVal}`)
+            else setEditValue(String(rawVal))
+          } else {
+            setEditValue(rawVal != null ? String(rawVal) : '')
+          }
         }}
         onMouseEnter={() => setHoveredCell({ key, field })}
         onMouseLeave={() => setHoveredCell(null)}
@@ -720,7 +766,7 @@ export default function BackendPage() {
           LIFT
         </button>
         <span style={{ color: '#444', fontSize: '13px', marginLeft: '10px' }}>
-          type <span style={{ color: '#888' }}>$85.50</span> for price · <span style={{ color: '#888' }}>285</span> for spread
+          <span style={{ color: '#888' }}>80-16</span> 32nds · <span style={{ color: '#888' }}>$85.50</span> price · <span style={{ color: '#888' }}>285</span> spread
         </span>
         <span style={{ color: '#333', fontSize: '15px', marginLeft: 'auto', paddingRight: '2px' }}>
           hover a BID / ASK / SIZE cell → click → type → Enter to save
@@ -835,7 +881,7 @@ export default function BackendPage() {
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
                       <span style={{ color: price?.bid != null ? '#ffffff' : '#2a2a2a' }}>
-                        {price?.bid != null ? (price.mode === 'price' ? `$${price.bid}` : String(price.bid)) : '—'}
+                        {formatPx(price?.bid, price?.mode)}
                       </span>
                       {price?.bid != null && bidTag && (
                         <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
@@ -848,7 +894,7 @@ export default function BackendPage() {
                   const askCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
                       <span style={{ color: price?.ask != null ? '#ffffff' : '#2a2a2a' }}>
-                        {price?.ask != null ? (price.mode === 'price' ? `$${price.ask}` : String(price.ask)) : '—'}
+                        {formatPx(price?.ask, price?.mode)}
                       </span>
                       {price?.ask != null && askTag && (
                         <span style={{ background: askTag.bg, color: askTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
@@ -877,7 +923,7 @@ export default function BackendPage() {
                       <td style={{ textAlign: 'right', padding: '6px 10px' }}>
                         {price?.last_trade_px != null ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
-                            <span style={{ color: '#888' }}>{String(price.last_trade_px)}</span>
+                            <span style={{ color: '#888' }}>{formatPx(price.last_trade_px, price.mode)}</span>
                             {price.last_trade_time && (
                               <span style={{ color: '#444', fontSize: '10px' }}>{fmtTime(price.last_trade_time)}</span>
                             )}
