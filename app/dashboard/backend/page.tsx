@@ -424,17 +424,19 @@ export default function BackendPage() {
     const dealer = selectedDealerRef.current
     const existing = prices[key]
 
-    // Detect format: 32nds ("80-01"), dollar price ("$85.50"), or spread (plain number)
-    const trimmed = value.trim()
-    const is32nds  = /^\d+-\d{1,2}$/.test(trimmed)
-    const isDollar = trimmed.startsWith('$')
+    // Detect format: 32nds ("80-01" or "$80-01"), dollar price ("$85.50"), or spread (plain number)
+    // Strip leading $ before format detection so "$86-16" is treated as 32nds same as "86-16"
+    const trimmed  = value.trim()
+    const stripped = trimmed.startsWith('$') ? trimmed.slice(1) : trimmed
+    const is32nds  = /^\d+-\d{1,2}$/.test(stripped)
+    const isDollar = !is32nds && trimmed.startsWith('$')
     const mode     = is32nds ? 'ticks' : isDollar ? 'price' : 'spread'
 
     let numericValue: number | null = null
-    if (trimmed !== '') {
-      if (is32nds)       numericValue = parse32nds(trimmed)
-      else if (isDollar) numericValue = parseFloat(trimmed.slice(1)) || null
-      else               numericValue = parseFloat(trimmed) || null
+    if (stripped !== '') {
+      if (is32nds)       numericValue = parse32nds(stripped)
+      else if (isDollar) numericValue = parseFloat(stripped) || null
+      else               numericValue = parseFloat(stripped) || null
     }
 
     const update: Record<string, unknown> = {
@@ -776,7 +778,7 @@ export default function BackendPage() {
           LIFT
         </button>
         <span style={{ color: '#444', fontSize: '13px', marginLeft: '10px' }}>
-          <span style={{ color: '#888' }}>80-16</span> 32nds · <span style={{ color: '#888' }}>$85.50</span> price · <span style={{ color: '#888' }}>285</span> spread
+          <span style={{ color: '#888' }}>80-16</span> or <span style={{ color: '#888' }}>$80-16</span> 32nds · <span style={{ color: '#888' }}>$85.50</span> price · <span style={{ color: '#888' }}>285</span> spread
         </span>
         <span style={{ color: '#333', fontSize: '15px', marginLeft: 'auto', paddingRight: '2px' }}>
           hover a BID / ASK / SIZE cell → click → type → Enter to save
