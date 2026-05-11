@@ -115,6 +115,16 @@ export default function HistoryPage() {
   const [trades,           setTrades]           = useState<TradeRow[]>([])
   const [marketCtx,        setMarketCtx]        = useState<MarketContext[]>([])
   const [loading,          setLoading]          = useState(false)
+  const [isTrader,         setIsTrader]         = useState(false)
+
+  // ── Check if trader (to show ADMIN tab) ──────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).single()
+        .then(({ data }) => { if (data?.role === 'trader') setIsTrader(true) })
+    })
+  }, [])
 
   // ── Realtime: sync trade deletes + inserts live ───────────────────────────────
   useEffect(() => {
@@ -355,8 +365,6 @@ export default function HistoryPage() {
       y1: { ...baseChartOptions.scales.y, position: 'right' as const, grid: { drawOnChartArea: false } },
     },
   }), [])
-
-  const isTrader = false
 
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
