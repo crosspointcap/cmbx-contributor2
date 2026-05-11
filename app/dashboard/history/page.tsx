@@ -116,6 +116,30 @@ export default function HistoryPage() {
   const [marketCtx,        setMarketCtx]        = useState<MarketContext[]>([])
   const [loading,          setLoading]          = useState(false)
 
+  // ── Realtime: sync trade deletes + inserts live ───────────────────────────────
+  useEffect(() => {
+    const ch = supabase
+      .channel(`history-rt-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
+        const id = (payload.old as any).id
+        if (id) setTrades(prev => prev.filter(t => t.id !== id))
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
+        const t = payload.new as any
+        const newTrade: TradeRow = {
+          id: t.id,
+          created_at: t.created_at,
+          series_number: t.series_number,
+          tranche_name: t.tranche_name,
+          price: t.price,
+          trade_size: t.trade_size,
+        }
+        setTrades(prev => [newTrade, ...prev])
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
   // ── Load all data when date range changes ─────────────────────────────────────
   useEffect(() => {
     loadData()
