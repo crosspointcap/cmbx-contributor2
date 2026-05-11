@@ -416,7 +416,12 @@ export default function BackendPage() {
   }
 
   async function clearAllTrades() {
-    await supabase.from('trades').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    const { error } = await supabase.from('trades').delete().not('id', 'is', null)
+    if (error) {
+      showError(`Clear failed: ${error.message}`)
+      setConfirmClearBlotter(false)
+      return
+    }
     blotterBroadcastRef.current?.send({ type: 'broadcast', event: 'blotter-cleared', payload: {} })
     setBlotterTrades([])
     setTradeLog(null)
