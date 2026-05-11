@@ -458,7 +458,7 @@ export default function BackendPage() {
       const sz = field === 'bid'
         ? (update.bid_size as number ?? existing?.bid_size ?? null)
         : (update.ask_size as number ?? existing?.ask_size ?? null)
-      supabase.from('price_changes').insert({
+      const baseRow = {
         series_number: seriesNum,
         tranche_name:  trancheName,
         dealer,
@@ -466,10 +466,19 @@ export default function BackendPage() {
         price:  numericValue,
         size:   sz,
         mode,
+      }
+      // Try with CDX columns first; if columns don't exist yet, fall back to base row
+      supabase.from('price_changes').insert({
+        ...baseRow,
         cdx_hy: latestCdxHyRef.current,
         cdx_ig: latestCdxIgRef.current,
       }).then(({ error }) => {
-        if (error) console.warn('[price_changes insert failed]', error.message)
+        if (error) {
+          console.warn('[price_changes insert with CDX failed, retrying without]', error.message)
+          supabase.from('price_changes').insert(baseRow).then(({ error: e2 }) => {
+            if (e2) console.warn('[price_changes insert failed]', e2.message)
+          })
+        }
       })
     }
 
@@ -605,6 +614,7 @@ export default function BackendPage() {
             autoFocus
             value={editValue}
             onChange={e => setEditValue(e.target.value)}
+            onFocus={e => e.target.select()}
             onKeyDown={e => {
               if (e.key === 'Enter') commitCell(key, field, editValue)
               if (e.key === 'Escape') setEditingCell(null)
