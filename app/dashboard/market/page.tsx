@@ -60,6 +60,8 @@ interface BlotterEntry {
   series: string
   tranche: string
   price: number | null
+  dealer: string | null
+  passive_dealer: string | null
 }
 
 function fmtTime(ts: string) {
@@ -149,6 +151,8 @@ export default function MarketPage() {
           series: t.series_number,
           tranche: t.tranche_name,
           price: t.price,
+          dealer: t.dealer ?? null,
+          passive_dealer: t.passive_dealer ?? null,
         }, ...prev].slice(0, 100))
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
@@ -162,7 +166,7 @@ export default function MarketPage() {
         supabase.from('series_config').select('series_number, sort_order').eq('active', true).order('sort_order'),
         supabase.from('tranche_config').select('tranche_name, sort_order').eq('active', true).order('sort_order'),
         supabase.from('prices').select('*'),
-        supabase.from('trades').select('id, side, series_number, tranche_name, price, created_at').order('created_at', { ascending: false }).limit(100),
+        supabase.from('trades').select('id, side, series_number, tranche_name, price, created_at, dealer, passive_dealer').order('created_at', { ascending: false }).limit(100),
       ])
       if (cancelled) return
       if (sd) setSeries(sd)
@@ -180,6 +184,8 @@ export default function MarketPage() {
           series: t.series_number,
           tranche: t.tranche_name,
           price: t.price,
+          dealer: t.dealer ?? null,
+          passive_dealer: t.passive_dealer ?? null,
         })))
       }
     }
@@ -337,8 +343,8 @@ export default function MarketPage() {
         </table>
       </div>
 
-      {/* Mini trade feed — anonymous */}
-      <div style={{ width: '260px', borderLeft: '1px solid #1e1e1e', background: '#080808', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      {/* Trade feed — personalised for my trades, anonymous for others */}
+      <div style={{ width: '270px', borderLeft: '1px solid #1e1e1e', background: '#080808', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#888', fontSize: '11px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
           TRADE FEED
           <span style={{ color: '#333', fontSize: '10px', fontWeight: 400 }}>{blotter.length} trades</span>
@@ -347,16 +353,49 @@ export default function MarketPage() {
           {blotter.length === 0 ? (
             <div style={{ padding: '12px', color: '#2a2a2a', fontSize: '13px' }}>— no trades yet</div>
           ) : (
-            blotter.map((b, i) => (
-              <div key={b.id} style={{ padding: '7px 10px', borderBottom: '1px solid #111', background: i % 2 === 0 ? '#080808' : '#0a0a0a' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: b.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700, fontSize: '12px', letterSpacing: '1px' }}>{b.action}</span>
-                  <span style={{ color: '#444', fontSize: '10px' }}>{b.time}</span>
+            blotter.map((b, i) => {
+              // Work out if I'm involved and what role I played
+              const iAmAggressor = myCode && b.dealer === myCode
+              const iAmPassive   = myCode && b.passive_dealer === myCode
+              const involved     = iAmAggressor || iAmPassive
+
+              // My side: did I buy or sell risk?
+              // LIFT aggressor = buyer; HIT aggressor = seller
+              // LIFT passive   = seller; HIT passive  = buyer
+              let mySide: 'BOUGHT' | 'SOLD' | null = null
+              let counterparty: string | null = null
+              if (iAmAggressor) {
+                mySide       = b.action === 'LIFT' ? 'BOUGHT' : 'SOLD'
+                counterparty = b.passive_dealer
+              } else if (iAmPassive) {
+                mySide       = b.action === 'LIFT' ? 'SOLD' : 'BOUGHT'
+                counterparty = b.dealer
+              }
+
+              const rowBg = involved
+                ? (i % 2 === 0 ? '#0d0d04' : '#111108')
+                : (i % 2 === 0 ? '#080808' : '#0a0a0a')
+
+              return (
+                <div key={b.id} style={{ padding: '7px 10px', borderBottom: '1px solid #111', background: rowBg, borderLeft: involved ? `2px solid ${myColor}` : '2px solid transparent' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: b.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700, fontSize: '12px', letterSpacing: '1px' }}>{b.action}</span>
+                    <span style={{ color: '#444', fontSize: '10px' }}>{b.time}</span>
+                  </div>
+                  <div style={{ color: involved ? '#fff' : '#ddd', fontSize: '12px', marginTop: '2px' }}>CMBX.{b.series}.{b.tranche}</div>
+                  {involved && mySide ? (
+                    <div style={{ marginTop: '3px' }}>
+                      <span style={{ color: mySide === 'BOUGHT' ? '#66ff88' : '#ff6666', fontWeight: 700, fontSize: '11px' }}>{mySide}</span>
+                      <span style={{ color: '#555', fontSize: '11px' }}> {mySide === 'BOUGHT' ? 'FROM' : 'TO'} </span>
+                      <span style={{ color: myColor, fontWeight: 700, fontSize: '11px' }}>{counterparty ?? '—'}</span>
+                      <span style={{ color: '#888', fontSize: '11px' }}> @ {b.price ?? '—'}</span>
+                    </div>
+                  ) : (
+                    <div style={{ color: '#888', fontSize: '12px', marginTop: '1px' }}>@ {b.price ?? '—'}</div>
+                  )}
                 </div>
-                <div style={{ color: '#ddd', fontSize: '12px', marginTop: '2px' }}>CMBX.{b.series}.{b.tranche}</div>
-                <div style={{ color: '#f0c040', fontSize: '12px', marginTop: '1px' }}>@ {b.price ?? '—'}</div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
