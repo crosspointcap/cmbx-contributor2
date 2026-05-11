@@ -194,10 +194,10 @@ export default function MarketPage() {
   )
 
   // ── Helper: price color ───────────────────────────────────────────────────
-  function priceColor(val: number | null, dealer: string | null, side: 'bid' | 'ask') {
+  function priceColor(val: number | null, dealer: string | null) {
     if (val == null) return '#2a2a2a'
     if (myCode && dealer === myCode) return myColor          // OWN price → brand color
-    return side === 'bid' ? '#66ff88' : '#ff6666'            // others → generic green/red
+    return '#ffffff'                                         // all others → white
   }
 
   return (
@@ -279,8 +279,8 @@ export default function MarketPage() {
                     if (flash === 'red')   rowBg = '#3a0000'
                     if (flash === 'green') rowBg = '#003a00'
 
-                    const bidColor = priceColor(price?.bid ?? null, price?.bid_dealer ?? null, 'bid')
-                    const askColor = priceColor(price?.ask ?? null, price?.ask_dealer ?? null, 'ask')
+                    const bidColor = priceColor(price?.bid ?? null, price?.bid_dealer ?? null)
+                    const askColor = priceColor(price?.ask ?? null, price?.ask_dealer ?? null)
 
                     return (
                       <tr key={rowKey} style={{ background: rowBg, borderBottom: '1px solid #161616' }}>
