@@ -283,11 +283,13 @@ export default function BackendPage() {
     return () => clearInterval(id)
   }, [])
 
-  // Persistent broadcast channel so we can signal clears to all clients
+  // Persistent broadcast channel — wait for SUBSCRIBED before storing ref
   useEffect(() => {
-    const ch = supabase.channel('trade-blotter-sync').subscribe()
-    blotterBroadcastRef.current = ch
-    return () => { supabase.removeChannel(ch) }
+    const ch = supabase.channel('trade-blotter-sync')
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') blotterBroadcastRef.current = ch
+    })
+    return () => { blotterBroadcastRef.current = null; supabase.removeChannel(ch) }
   }, [])
 
   useEffect(() => {

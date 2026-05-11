@@ -142,6 +142,10 @@ export default function HistoryPage() {
         }
         setTrades(prev => [newTrade, ...prev])
       })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
+        const id = (payload.old as any).id
+        if (id) setTrades(prev => prev.filter(t => t.id !== id))
+      })
       .subscribe()
 
     const broadcastCh = supabase.channel('trade-blotter-sync')

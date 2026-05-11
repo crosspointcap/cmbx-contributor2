@@ -151,6 +151,10 @@ export default function MarketPage() {
           price: t.price,
         }, ...prev].slice(0, 100))
       })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
+        const id = (payload.old as any).id
+        if (id) setBlotter(prev => prev.filter(b => b.id !== id))
+      })
       .subscribe()
 
     async function loadData() {
