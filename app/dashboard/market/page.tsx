@@ -195,7 +195,7 @@ export default function MarketPage() {
       </div>
 
       {/* Nav tabs */}
-      <NavTabs active="prices" isTrader={profile?.role === 'trader'} />
+      <NavTabs active="history" isTrader={profile?.role === 'trader'} />
 
       {/* Grid — READ ONLY */}
       <div style={{ flex: 1, overflow: 'auto' }}>

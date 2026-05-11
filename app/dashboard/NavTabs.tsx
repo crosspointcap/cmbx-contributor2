@@ -1,13 +1,12 @@
 import React from 'react'
 
 interface NavTabsProps {
-  active: 'prices' | 'history' | 'admin'
+  active: 'history' | 'admin'
   isTrader: boolean
 }
 
 export function NavTabs({ active, isTrader }: NavTabsProps) {
   const tabs: { id: string; label: string; href: string }[] = [
-    { id: 'prices',  label: 'PRICES',  href: '/dashboard/market' },
     { id: 'history', label: 'HISTORY', href: '/dashboard/history' },
     ...(isTrader ? [{ id: 'admin', label: 'ADMIN', href: '/dashboard/backend' }] : []),
   ]

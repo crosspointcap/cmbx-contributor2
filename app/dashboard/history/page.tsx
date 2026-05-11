@@ -25,8 +25,6 @@ const supabase = createClient(
 const DATE_RANGES = ['1W', '1M', '3M', '6M', '1Y', 'ALL'] as const
 type DateRange = typeof DATE_RANGES[number]
 
-interface Profile { role: string }
-
 interface DailySnapshot {
   date: string
   series_number: string
@@ -111,8 +109,6 @@ const baseChartOptions = {
 }
 
 export default function HistoryPage() {
-  const [profile,          setProfile]          = useState<Profile | null>(null)
-  const [authChecked,      setAuthChecked]      = useState(false)
   const [dateRange,        setDateRange]        = useState<DateRange>('3M')
   const [selectedChartKey, setSelectedChartKey] = useState<string | null>(null)
   const [snapshots,        setSnapshots]        = useState<DailySnapshot[]>([])
@@ -120,25 +116,10 @@ export default function HistoryPage() {
   const [marketCtx,        setMarketCtx]        = useState<MarketContext[]>([])
   const [loading,          setLoading]          = useState(false)
 
-  // ── Auth ──────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { window.location.href = '/login'; return }
-      const { data: prof } = await supabase
-        .from('profiles').select('role').eq('id', session.user.id).single()
-      if (!prof) { window.location.href = '/login'; return }
-      setProfile(prof)
-      setAuthChecked(true)
-    }
-    checkAuth()
-  }, [])
-
   // ── Load all data when date range changes ─────────────────────────────────────
   useEffect(() => {
-    if (!authChecked) return
     loadData()
-  }, [authChecked, dateRange]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dateRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadData() {
     setLoading(true)
@@ -351,14 +332,7 @@ export default function HistoryPage() {
     },
   }), [])
 
-  // ── Loading screen ────────────────────────────────────────────────────────────
-  if (!authChecked) return (
-    <div style={{ background: '#0a0a0a', color: '#444', fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      AUTHENTICATING...
-    </div>
-  )
-
-  const isTrader = profile?.role === 'trader'
+  const isTrader = false
 
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
