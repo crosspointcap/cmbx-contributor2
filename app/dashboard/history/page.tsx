@@ -35,6 +35,8 @@ interface PriceChange {
   price: number | null
   size: number | null
   mode: string | null
+  cdx_hy: number | null
+  cdx_ig: number | null
 }
 
 interface TradeRow {
@@ -138,6 +140,7 @@ export default function HistoryPage() {
           id: pc.id, created_at: pc.created_at,
           series_number: pc.series_number, tranche_name: pc.tranche_name,
           dealer: pc.dealer, side: pc.side, price: pc.price, size: pc.size, mode: pc.mode,
+          cdx_hy: pc.cdx_hy ?? null, cdx_ig: pc.cdx_ig ?? null,
         }, ...prev])
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
@@ -174,7 +177,7 @@ export default function HistoryPage() {
 
     let pcQ = supabase
       .from('price_changes')
-      .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode')
+      .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode, cdx_hy, cdx_ig')
       .order('created_at', { ascending: false })
       .limit(2000)
 
@@ -407,6 +410,9 @@ export default function HistoryPage() {
                   const key = `${pc.series_number}:${pc.tranche_name}`
                   const isSelected = key === selectedChartKey
                   const ctx = ctxByDate[pc.created_at.split('T')[0]]
+                  // Use CDX stamped directly on the row (exact moment); fall back to daily ctx for older rows
+                  const pcCdxHy = pc.cdx_hy ?? ctx?.cdx_hy_spread ?? null
+                  const pcCdxIg = pc.cdx_ig ?? ctx?.cdx_ig_spread ?? null
                   const dealerColor = pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#555'
                   return (
                     <tr key={pc.id} onClick={() => setSelectedChartKey(key)} style={{
@@ -424,9 +430,9 @@ export default function HistoryPage() {
                         {pc.price != null ? (pc.mode === 'price' ? `$${pc.price}` : String(pc.price)) : '—'}
                       </td>
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_hy_spread != null ? '#eebb00' : '#2a2a2a' }}>{ctx?.cdx_hy_spread != null ? ctx.cdx_hy_spread.toFixed(1) : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_ig_spread != null ? '#44ddaa' : '#2a2a2a' }}>{ctx?.cdx_ig_spread != null ? ctx.cdx_ig_spread.toFixed(1) : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close    != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close    != null ? ctx.spx_close.toLocaleString()   : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: pcCdxHy != null ? '#eebb00' : '#2a2a2a' }}>{pcCdxHy != null ? pcCdxHy.toFixed(1) : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: pcCdxIg != null ? '#44ddaa' : '#2a2a2a' }}>{pcCdxIg != null ? pcCdxIg.toFixed(1) : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
                     </tr>
                   )
                 })}

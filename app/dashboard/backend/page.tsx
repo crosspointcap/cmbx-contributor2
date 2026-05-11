@@ -250,6 +250,8 @@ export default function BackendPage() {
   const selectedDealerRef   = useRef(selectedDealer)
   const selectedRowRef      = useRef(selectedRow)
   const blotterBroadcastRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const latestCdxHyRef      = useRef<number | null>(null)
+  const latestCdxIgRef      = useRef<number | null>(null)
   selectedDealerRef.current = selectedDealer
   selectedRowRef.current    = selectedRow
 
@@ -336,12 +338,13 @@ export default function BackendPage() {
       .subscribe()
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }] = await Promise.all([
+      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }, { data: ctx }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
         supabase.from('agent_heartbeat').select('*').limit(1).single(),
         supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(200),
+        supabase.from('market_context').select('cdx_hy_spread, cdx_ig_spread').order('date', { ascending: false }).limit(1).single(),
       ])
       if (cancelled) return
       if (sd) {
@@ -371,6 +374,10 @@ export default function BackendPage() {
         setPrices(map)
       }
       if (hb) setAgentOnline((hb as { bbg_connected?: boolean; active?: boolean }).bbg_connected ?? (hb as { bbg_connected?: boolean; active?: boolean }).active ?? false)
+      if (ctx) {
+        latestCdxHyRef.current = (ctx as any).cdx_hy_spread ?? null
+        latestCdxIgRef.current = (ctx as any).cdx_ig_spread ?? null
+      }
     }
 
     loadData()
@@ -419,10 +426,12 @@ export default function BackendPage() {
           series_number: seriesNum,
           tranche_name:  trancheName,
           dealer,
-          side:  field,
-          price: priceVal,
-          size:  sz,
-          mode:  update.mode,
+          side:   field,
+          price:  priceVal,
+          size:   sz,
+          mode:   update.mode,
+          cdx_hy: latestCdxHyRef.current,
+          cdx_ig: latestCdxIgRef.current,
         }).then(() => {}) // fire and forget
       }
     }
