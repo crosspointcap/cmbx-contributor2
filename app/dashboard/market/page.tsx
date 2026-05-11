@@ -129,6 +129,10 @@ export default function MarketPage() {
           setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
         }
       })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
+        const id = (payload.old as any).id
+        if (id) setBlotter(prev => prev.filter(b => b.id !== id))
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const t = payload.new as any
         const key = `${t.series_number}:${t.tranche_name}`
