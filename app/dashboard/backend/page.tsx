@@ -375,7 +375,7 @@ export default function BackendPage() {
       if (sd) {
         setSeries(sd)
         if (!defaultsApplied.current) {
-          setCollapsedSeries(new Set())  // all series expanded by default — live rows visible immediately
+          setCollapsedSeries(new Set(sd.map((s: SeriesConfig) => s.series_number)))  // all series collapsed on load
           defaultsApplied.current = true
         }
       }
