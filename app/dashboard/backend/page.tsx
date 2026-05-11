@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
+import * as XLSX from 'xlsx'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -409,6 +410,24 @@ export default function BackendPage() {
     setBlotterTrades([])
     setTradeLog(null)
     setConfirmClearBlotter(false)
+  }
+
+  function exportBlotterXlsx() {
+    const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
+    const rows = blotterTrades.map(t => ({
+      'TIME (ET)':   t.time,
+      'ACTION':      t.action,
+      'TRANCHE':     `CMBX.${t.series}.${t.tranche}`,
+      'BUYER':       t.action === 'LIFT' ? t.dealer : (t.passive_dealer ?? ''),
+      'SELLER':      t.action === 'LIFT' ? (t.passive_dealer ?? '') : t.dealer,
+      'PRICE':       t.price ?? '',
+      'SIZE (MM)':   t.trade_size ?? '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Trade Blotter')
+    XLSX.writeFile(wb, `CMBX_Blotter_${today}.xlsx`)
   }
 
   async function clearAllPrices() {
@@ -837,7 +856,14 @@ export default function BackendPage() {
           <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#f0c040', fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>TRADE BLOTTER</span>
             <span style={{ color: '#444', fontSize: '11px', fontWeight: 400 }}>{blotterTrades.length} trades</span>
-            <span style={{ marginLeft: 'auto' }}>
+            <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <button
+                onClick={exportBlotterXlsx}
+                disabled={blotterTrades.length === 0}
+                style={{ background: blotterTrades.length > 0 ? '#0a1a0a' : 'transparent', color: blotterTrades.length > 0 ? '#66ff88' : '#333', border: `1px solid ${blotterTrades.length > 0 ? '#336633' : '#222'}`, padding: '1px 7px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: blotterTrades.length > 0 ? 'pointer' : 'default', borderRadius: '2px', letterSpacing: '1px' }}
+              >
+                XLS
+              </button>
               {!confirmClearBlotter ? (
                 <button
                   onClick={() => setConfirmClearBlotter(true)}
