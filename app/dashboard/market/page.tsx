@@ -53,6 +53,15 @@ interface TrancheConfig {
   sort_order: number
 }
 
+interface BlotterEntry {
+  id: string
+  time: string
+  action: 'HIT' | 'LIFT'
+  series: string
+  tranche: string
+  price: number | null
+}
+
 function fmtTime(ts: string) {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -69,6 +78,7 @@ export default function MarketPage() {
   const [flashRows,    setFlashRows]    = useState<Record<string, 'red' | 'green'>>({})
   const [lastTrade,    setLastTrade]    = useState<{ series: string; tranche: string; price: number | null; time: string } | null>(null)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
+  const [blotter, setBlotter] = useState<BlotterEntry[]>([])
 
   function toggleCollapse(seriesNum: string) {
     setCollapsedSeries(prev => {
@@ -124,14 +134,23 @@ export default function MarketPage() {
         const key = `${t.series_number}:${t.tranche_name}`
         flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
         setLastTrade({ series: t.series_number, tranche: t.tranche_name, price: t.price, time: fmtTime(t.created_at) })
+        setBlotter(prev => [{
+          id: t.id,
+          time: fmtTime(t.created_at),
+          action: t.side === 'hit' ? 'HIT' : 'LIFT',
+          series: t.series_number,
+          tranche: t.tranche_name,
+          price: t.price,
+        }, ...prev].slice(0, 100))
       })
       .subscribe()
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }] = await Promise.all([
+      const [{ data: sd }, { data: td }, { data: pd }, { data: tr }] = await Promise.all([
         supabase.from('series_config').select('series_number, sort_order').eq('active', true).order('sort_order'),
         supabase.from('tranche_config').select('tranche_name, sort_order').eq('active', true).order('sort_order'),
         supabase.from('prices').select('*'),
+        supabase.from('trades').select('id, side, series_number, tranche_name, price, created_at').order('created_at', { ascending: false }).limit(100),
       ])
       if (cancelled) return
       if (sd) setSeries(sd)
@@ -140,6 +159,16 @@ export default function MarketPage() {
         const map: Record<string, Price> = {}
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
         setPrices(map)
+      }
+      if (tr) {
+        setBlotter(tr.map((t: any) => ({
+          id: t.id,
+          time: fmtTime(t.created_at),
+          action: t.side === 'hit' ? 'HIT' : 'LIFT',
+          series: t.series_number,
+          tranche: t.tranche_name,
+          price: t.price,
+        })))
       }
     }
 
@@ -197,7 +226,8 @@ export default function MarketPage() {
       {/* Nav tabs */}
       <NavTabs active="history" isTrader={profile?.role === 'trader'} />
 
-      {/* Grid — READ ONLY */}
+      {/* Grid + Mini Blotter */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
           <thead>
@@ -294,6 +324,32 @@ export default function MarketPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Mini trade feed — anonymous */}
+      <div style={{ width: '260px', borderLeft: '1px solid #1e1e1e', background: '#080808', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#888', fontSize: '11px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          TRADE FEED
+          <span style={{ color: '#333', fontSize: '10px', fontWeight: 400 }}>{blotter.length} trades</span>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {blotter.length === 0 ? (
+            <div style={{ padding: '12px', color: '#2a2a2a', fontSize: '13px' }}>— no trades yet</div>
+          ) : (
+            blotter.map((b, i) => (
+              <div key={b.id} style={{ padding: '7px 10px', borderBottom: '1px solid #111', background: i % 2 === 0 ? '#080808' : '#0a0a0a' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: b.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700, fontSize: '12px', letterSpacing: '1px' }}>{b.action}</span>
+                  <span style={{ color: '#444', fontSize: '10px' }}>{b.time}</span>
+                </div>
+                <div style={{ color: '#ddd', fontSize: '12px', marginTop: '2px' }}>CMBX.{b.series}.{b.tranche}</div>
+                <div style={{ color: '#f0c040', fontSize: '12px', marginTop: '1px' }}>@ {b.price ?? '—'}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      </div>{/* end grid + blotter row */}
 
       {/* Bottom bar */}
       <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '16px', background: '#080808' }}>

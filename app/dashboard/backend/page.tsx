@@ -165,6 +165,7 @@ interface TradeLog {
   series: string
   tranche: string
   dealer: string
+  passive_dealer: string | null
   price: number | null
 }
 
@@ -313,7 +314,7 @@ export default function BackendPage() {
           trade_size: t.trade_size ?? null,
           price: t.price,
         }
-        setTradeLog({ time: entry.time, action: entry.action, series: entry.series, tranche: entry.tranche, dealer: entry.dealer, price: entry.price })
+        setTradeLog({ time: entry.time, action: entry.action, series: entry.series, tranche: entry.tranche, dealer: entry.dealer, passive_dealer: entry.passive_dealer, price: entry.price })
         setBlotterTrades(prev => [entry, ...prev])
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_heartbeat' }, (payload) => {
@@ -836,9 +837,19 @@ export default function BackendPage() {
                     <span style={{ color: '#444', fontSize: '11px' }}>{t.time}</span>
                   </div>
                   <div style={{ color: '#ccc', fontSize: '13px' }}>CMBX.{t.series}.{t.tranche}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                    <span style={{ color: '#f0c040', fontSize: '13px' }}>{t.dealer}</span>
-                    <span style={{ color: '#888', fontSize: '13px' }}>@ {t.price ?? '—'}</span>
+                  <div style={{ marginTop: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                      <span style={{ color: '#66ff88', fontWeight: 700 }}>
+                        {t.action === 'LIFT' ? t.dealer : (t.passive_dealer ?? '?')}
+                      </span>
+                      <span style={{ color: '#444', fontSize: '10px' }}>buys</span>
+                      <span style={{ color: '#555' }}>↔</span>
+                      <span style={{ color: '#444', fontSize: '10px' }}>sells</span>
+                      <span style={{ color: '#ff6666', fontWeight: 700 }}>
+                        {t.action === 'LIFT' ? (t.passive_dealer ?? '?') : t.dealer}
+                      </span>
+                      <span style={{ marginLeft: 'auto', color: '#888', fontSize: '12px' }}>@ {t.price ?? '—'}</span>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
                     <button
@@ -876,12 +887,12 @@ export default function BackendPage() {
         const feePerMM = FACILITATION_FEE_PER_MM[t.tranche] ?? 115
         const facFee = notional ? `$${(notional / 1_000_000 * feePerMM).toLocaleString()}` : '—'
 
-        // HIT: dealer = Protection Buyer (Seller of Risk), passive = Protection Seller (Buyer of Risk)
-        // LIFT: dealer = Protection Seller (Buyer of Risk), passive = Protection Buyer (Seller of Risk)
-        const buyerCode  = t.action === 'HIT'  ? t.dealer        : (t.passive_dealer ?? '—')
-        const sellerCode = t.action === 'HIT'  ? (t.passive_dealer ?? '—') : t.dealer
-        const buyerInfo  = DEALER_INFO[buyerCode]
-        const sellerInfo = DEALER_INFO[sellerCode]
+        // LIFT: dealer lifts offer → dealer buys risk; passive (offerer) sells risk
+        // HIT:  dealer hits bid   → dealer sells risk; passive (bidder) buys risk
+        const riskBuyerCode  = t.action === 'LIFT' ? t.dealer : (t.passive_dealer ?? '—')
+        const riskSellerCode = t.action === 'LIFT' ? (t.passive_dealer ?? '—') : t.dealer
+        const riskBuyerInfo  = DEALER_INFO[riskBuyerCode]
+        const riskSellerInfo = DEALER_INFO[riskSellerCode]
 
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '20px' }}>
@@ -904,19 +915,19 @@ export default function BackendPage() {
               {/* Parties */}
               <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Parties to the Transaction:</div>
               <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontWeight: 700 }}>● Protection Buyer (Seller of Risk):</span><br />
-                  <span style={{ fontWeight: 700 }}>{buyerInfo?.legal ?? buyerCode}</span><br />
-                  {buyerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
-                  {buyerInfo?.phone && <span>Phone: {buyerInfo.phone}<br /></span>}
-                  {buyerInfo && <span>Email: {buyerInfo.email}</span>}
+                <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #eee' }}>
+                  <span style={{ fontWeight: 700, color: '#1a6622' }}>● BUYER OF RISK ({riskBuyerCode}):</span><br />
+                  <span style={{ fontWeight: 700 }}>{riskBuyerInfo?.legal ?? riskBuyerCode}</span><br />
+                  {riskBuyerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                  {riskBuyerInfo?.phone && <span>Phone: {riskBuyerInfo.phone}<br /></span>}
+                  {riskBuyerInfo && <span>Email: {riskBuyerInfo.email}</span>}
                 </div>
                 <div>
-                  <span style={{ fontWeight: 700 }}>● Protection Seller (Buyer of Risk):</span><br />
-                  <span style={{ fontWeight: 700 }}>{sellerInfo?.legal ?? sellerCode}</span><br />
-                  {sellerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
-                  {sellerInfo?.phone && <span>Phone: {sellerInfo.phone}<br /></span>}
-                  {sellerInfo && <span>Email: {sellerInfo.email}</span>}
+                  <span style={{ fontWeight: 700, color: '#881111' }}>● SELLER OF RISK ({riskSellerCode}):</span><br />
+                  <span style={{ fontWeight: 700 }}>{riskSellerInfo?.legal ?? riskSellerCode}</span><br />
+                  {riskSellerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                  {riskSellerInfo?.phone && <span>Phone: {riskSellerInfo.phone}<br /></span>}
+                  {riskSellerInfo && <span>Email: {riskSellerInfo.email}</span>}
                 </div>
               </div>
 
@@ -941,7 +952,7 @@ export default function BackendPage() {
                   {confirmUpfront && <span className="print-only" style={{ display: 'none' }}>{confirmUpfront}</span>}
                   <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
                 </div>
-                <div>● <strong>Upfront Fee Payable to:</strong> {t.price != null && t.price > 100 ? buyerInfo?.legal ?? buyerCode : sellerInfo?.legal ?? sellerCode}</div>
+                <div>● <strong>Upfront Fee Payable to:</strong> {t.price != null && t.price > 100 ? riskBuyerInfo?.legal ?? riskBuyerCode : riskSellerInfo?.legal ?? riskSellerCode}</div>
               </div>
 
               <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
@@ -972,7 +983,7 @@ export default function BackendPage() {
               <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
 
               <div style={{ fontSize: '12px', color: '#444', marginBottom: '24px' }}>
-                This document serves as an official confirmation of the terms agreed upon between <strong>{buyerInfo?.legal ?? buyerCode}</strong> (as the Protection Buyer) and <strong>{sellerInfo?.legal ?? sellerCode}</strong> (as the Protection Seller) for the {index} tranche trade executed on <strong>{tradeDate}</strong>. All terms are subject to the provisions of the ISDA Master Agreement and related confirmations executed between the parties.
+                This document serves as an official confirmation of the terms agreed upon between <strong>{riskBuyerInfo?.legal ?? riskBuyerCode}</strong> (as the Buyer of Risk) and <strong>{riskSellerInfo?.legal ?? riskSellerCode}</strong> (as the Seller of Risk) for the {index} tranche trade executed on <strong>{tradeDate}</strong>. All terms are subject to the provisions of the ISDA Master Agreement and related confirmations executed between the parties.
               </div>
 
               {/* Buttons */}
@@ -1002,8 +1013,11 @@ export default function BackendPage() {
             <span style={{ color: '#444' }}>[{tradeLog.time}]</span>
             <span style={{ color: tradeLog.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700 }}>{tradeLog.action}</span>
             <span style={{ color: '#666' }}>— CMBX.{tradeLog.series}.{tradeLog.tranche}</span>
-            <span style={{ color: '#444' }}>{tradeLog.action === 'HIT' ? 'SOLD TO' : 'BOUGHT FROM'}</span>
-            <span style={{ color: '#f0c040' }}>{tradeLog.dealer}</span>
+            <span style={{ color: '#444' }}>BUYER</span>
+            <span style={{ color: '#66ff88', fontWeight: 700 }}>{tradeLog.action === 'LIFT' ? tradeLog.dealer : (tradeLog.passive_dealer ?? '?')}</span>
+            <span style={{ color: '#333' }}>↔</span>
+            <span style={{ color: '#444' }}>SELLER</span>
+            <span style={{ color: '#ff6666', fontWeight: 700 }}>{tradeLog.action === 'LIFT' ? (tradeLog.passive_dealer ?? '?') : tradeLog.dealer}</span>
             <span style={{ color: '#444' }}>@</span>
             <span style={{ color: '#bbb' }}>{tradeLog.price ?? '—'}</span>
             <span style={{ color: '#333' }}>▶</span>
