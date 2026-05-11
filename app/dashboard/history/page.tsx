@@ -67,6 +67,19 @@ function getStartDate(range: DateRange): string | null {
   return d.toISOString().split('T')[0]
 }
 
+function fmt32nds(n: number): string {
+  const whole = Math.floor(n)
+  const ticks = Math.round((n - whole) * 32)
+  return `${whole}-${ticks.toString().padStart(2, '0')}`
+}
+
+function formatPx(price: number | null | undefined, mode: string | null | undefined): string {
+  if (price == null) return '—'
+  if (mode === 'ticks') return fmt32nds(price)
+  if (mode === 'price') return `$${price}`
+  return String(price)
+}
+
 function fmtTime(ts: string) {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -120,13 +133,17 @@ export default function HistoryPage() {
   const [marketCtx,        setMarketCtx]        = useState<MarketContext[]>([])
   const [loading,          setLoading]          = useState(false)
   const [isTrader,         setIsTrader]         = useState(false)
+  const [myDealerCode,     setMyDealerCode]     = useState<string | null>(null)
 
-  // ── Check if trader (to show ADMIN tab) ──────────────────────────────────────
+  // ── Check role + own dealer code ─────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
-      supabase.from('profiles').select('role').eq('id', session.user.id).single()
-        .then(({ data }) => { if (data?.role === 'trader') setIsTrader(true) })
+      supabase.from('profiles').select('role, dealer_code').eq('id', session.user.id).single()
+        .then(({ data }) => {
+          if (data?.role === 'trader') setIsTrader(true)
+          setMyDealerCode(data?.dealer_code ?? null)
+        })
     })
   }, [])
 
@@ -413,7 +430,10 @@ export default function HistoryPage() {
                   // Use CDX stamped directly on the row (exact moment); fall back to daily ctx for older rows
                   const pcCdxHy = pc.cdx_hy ?? ctx?.cdx_hy_spread ?? null
                   const pcCdxIg = pc.cdx_ig ?? ctx?.cdx_ig_spread ?? null
-                  const dealerColor = pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#555'
+                  // Traders see all dealer names; dealers only see their own
+                  const canSeeDealer = isTrader || pc.dealer === myDealerCode
+                  const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
+                  const dealerColor = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
                   return (
                     <tr key={pc.id} onClick={() => setSelectedChartKey(key)} style={{
                       background: isSelected ? '#111100' : i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
@@ -423,11 +443,11 @@ export default function HistoryPage() {
                     }}>
                       <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(pc.created_at)}</td>
                       <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(pc.created_at)}</td>
-                      <td style={{ padding: '3px 6px',  color: dealerColor, fontWeight: 700 }}>{pc.dealer ?? '—'}</td>
+                      <td style={{ padding: '3px 6px',  color: dealerColor, fontWeight: 700 }}>{visibleDealer}</td>
                       <td style={{ padding: '3px 6px',  color: isSelected ? '#f0c040' : '#aaa' }}>CMBX.{pc.series_number}.{pc.tranche_name}</td>
                       <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                       <td style={{ textAlign: 'right', padding: '3px 6px', color: '#fff' }}>
-                        {pc.price != null ? (pc.mode === 'price' ? `$${pc.price}` : String(pc.price)) : '—'}
+                        {formatPx(pc.price, pc.mode)}
                       </td>
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: pcCdxHy != null ? '#eebb00' : '#2a2a2a' }}>{pcCdxHy != null ? pcCdxHy.toFixed(1) : '—'}</td>
