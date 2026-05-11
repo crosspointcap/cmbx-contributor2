@@ -407,6 +407,26 @@ export default function BackendPage() {
     if (field === 'ask' && value !== '' && existing?.ask_size == null) update.ask_size = defSize
 
     await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
+
+    // Log every bid/ask price entry to the audit table
+    if ((field === 'bid' || field === 'ask') && value !== '') {
+      const priceVal = parseFloat(value.replace(/^\$/, '')) || null
+      if (priceVal != null) {
+        const sz = field === 'bid'
+          ? (update.bid_size as number ?? existing?.bid_size ?? null)
+          : (update.ask_size as number ?? existing?.ask_size ?? null)
+        supabase.from('price_changes').insert({
+          series_number: seriesNum,
+          tranche_name:  trancheName,
+          dealer,
+          side:  field,
+          price: priceVal,
+          size:  sz,
+          mode:  update.mode,
+        }).then(() => {}) // fire and forget
+      }
+    }
+
     setEditingCell(null)
   }
 
