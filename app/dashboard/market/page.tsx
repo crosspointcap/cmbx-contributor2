@@ -232,7 +232,7 @@ export default function MarketPage() {
       </div>
 
       {/* Nav tabs */}
-      <NavTabs active="history" isTrader={profile?.role === 'trader'} />
+      <NavTabs active="market" isTrader={profile?.role === 'trader'} />
 
       {/* Grid + Mini Blotter */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
