@@ -126,14 +126,10 @@ export default function HistoryPage() {
     })
   }, [])
 
-  // ── Realtime: sync trade deletes + inserts live ───────────────────────────────
+  // ── Realtime: sync trade inserts + broadcast clear ───────────────────────────
   useEffect(() => {
     const ch = supabase
       .channel(`history-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
-        const id = (payload.old as any).id
-        if (id) setTrades(prev => prev.filter(t => t.id !== id))
-      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const t = payload.new as any
         const newTrade: TradeRow = {
@@ -147,7 +143,15 @@ export default function HistoryPage() {
         setTrades(prev => [newTrade, ...prev])
       })
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
+
+    const broadcastCh = supabase.channel('trade-blotter-sync')
+      .on('broadcast', { event: 'blotter-cleared' }, () => setTrades([]))
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(ch)
+      supabase.removeChannel(broadcastCh)
+    }
   }, [])
 
   // ── Load all data when date range changes ─────────────────────────────────────

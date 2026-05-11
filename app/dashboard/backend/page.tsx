@@ -247,10 +247,11 @@ export default function BackendPage() {
     })
   }
 
-  const selectedDealerRef = useRef(selectedDealer)
-  const selectedRowRef = useRef(selectedRow)
+  const selectedDealerRef   = useRef(selectedDealer)
+  const selectedRowRef      = useRef(selectedRow)
+  const blotterBroadcastRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   selectedDealerRef.current = selectedDealer
-  selectedRowRef.current = selectedRow
+  selectedRowRef.current    = selectedRow
 
   // Auth check
   useEffect(() => {
@@ -280,6 +281,13 @@ export default function BackendPage() {
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
+  }, [])
+
+  // Persistent broadcast channel so we can signal clears to all clients
+  useEffect(() => {
+    const ch = supabase.channel('trade-blotter-sync').subscribe()
+    blotterBroadcastRef.current = ch
+    return () => { supabase.removeChannel(ch) }
   }, [])
 
   useEffect(() => {
@@ -407,6 +415,7 @@ export default function BackendPage() {
 
   async function clearAllTrades() {
     await supabase.from('trades').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    blotterBroadcastRef.current?.send({ type: 'broadcast', event: 'blotter-cleared', payload: {} })
     setBlotterTrades([])
     setTradeLog(null)
     setConfirmClearBlotter(false)

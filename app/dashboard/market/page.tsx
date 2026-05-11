@@ -109,6 +109,14 @@ export default function MarketPage() {
     checkAuth()
   }, [])
 
+  // ── Broadcast: clear feed when admin wipes the blotter ───────────────────
+  useEffect(() => {
+    const ch = supabase.channel('trade-blotter-sync')
+      .on('broadcast', { event: 'blotter-cleared' }, () => setBlotter([]))
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
   // ── Data + realtime ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!authChecked) return
@@ -128,10 +136,6 @@ export default function MarketPage() {
           const p = payload.new as Price
           setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
         }
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
-        const id = (payload.old as any).id
-        if (id) setBlotter(prev => prev.filter(b => b.id !== id))
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const t = payload.new as any
