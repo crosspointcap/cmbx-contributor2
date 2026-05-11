@@ -235,6 +235,7 @@ export default function BackendPage() {
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
   const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
   const [confirmUpfront, setConfirmUpfront] = useState('')
+  const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
 
   function toggleCollapse(seriesNum: string) {
     setCollapsedSeries(prev => {
@@ -401,6 +402,13 @@ export default function BackendPage() {
   async function deleteTrade(id: string) {
     await supabase.from('trades').delete().eq('id', id)
     setBlotterTrades(prev => prev.filter(t => t.id !== id))
+  }
+
+  async function clearAllTrades() {
+    await supabase.from('trades').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    setBlotterTrades([])
+    setTradeLog(null)
+    setConfirmClearBlotter(false)
   }
 
   async function clearAllPrices() {
@@ -826,9 +834,25 @@ export default function BackendPage() {
       {/* Blotter panel */}
       {showBlotter && (
         <div style={{ width: '300px', borderLeft: '1px solid #1e1e1e', background: '#080808', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#f0c040', fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0 }}>
-            TRADE BLOTTER
-            <span style={{ color: '#444', fontSize: '11px', fontWeight: 400, marginLeft: '8px' }}>{blotterTrades.length} trades</span>
+          <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#f0c040', fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>TRADE BLOTTER</span>
+            <span style={{ color: '#444', fontSize: '11px', fontWeight: 400 }}>{blotterTrades.length} trades</span>
+            <span style={{ marginLeft: 'auto' }}>
+              {!confirmClearBlotter ? (
+                <button
+                  onClick={() => setConfirmClearBlotter(true)}
+                  style={{ background: 'transparent', color: '#444', border: '1px solid #2a2a2a', padding: '1px 7px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px' }}
+                >
+                  CLEAR
+                </button>
+              ) : (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ color: '#ff4444', fontSize: '10px' }}>sure?</span>
+                  <button onClick={clearAllTrades} style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '1px 7px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', fontWeight: 700 }}>YES</button>
+                  <button onClick={() => setConfirmClearBlotter(false)} style={{ background: '#111', color: '#555', border: '1px solid #2a2a2a', padding: '1px 7px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}>NO</button>
+                </span>
+              )}
+            </span>
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {blotterTrades.length === 0 ? (
