@@ -255,6 +255,7 @@ export default function BackendPage() {
   const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
+  const [showEmptyRows,   setShowEmptyRows]   = useState(false)
   const defaultsApplied = useRef(false)
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
@@ -374,7 +375,7 @@ export default function BackendPage() {
       if (sd) {
         setSeries(sd)
         if (!defaultsApplied.current) {
-          setCollapsedSeries(new Set(sd.map((s: SeriesConfig) => s.series_number)))
+          setCollapsedSeries(new Set())  // all series expanded by default — live rows visible immediately
           defaultsApplied.current = true
         }
       }
@@ -780,7 +781,20 @@ export default function BackendPage() {
         <span style={{ color: '#444', fontSize: '13px', marginLeft: '10px' }}>
           <span style={{ color: '#888' }}>80-16</span> or <span style={{ color: '#888' }}>$80-16</span> 32nds · <span style={{ color: '#888' }}>$85.50</span> price · <span style={{ color: '#888' }}>285</span> spread
         </span>
-        <span style={{ color: '#333', fontSize: '15px', marginLeft: 'auto', paddingRight: '2px' }}>
+        <button
+          onClick={() => setShowEmptyRows(v => !v)}
+          style={{
+            marginLeft: 'auto',
+            background: showEmptyRows ? '#1a1a00' : 'transparent',
+            color: showEmptyRows ? '#f0c040' : '#444',
+            border: `1px solid ${showEmptyRows ? '#f0c040' : '#2a2a2a'}`,
+            padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
+            cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
+          }}
+        >
+          {showEmptyRows ? '▼ HIDE EMPTY' : '▶ SHOW EMPTY'}
+        </button>
+        <span style={{ color: '#333', fontSize: '15px', paddingRight: '2px' }}>
           hover a BID / ASK / SIZE cell → click → type → Enter to save
         </span>
 
@@ -873,9 +887,10 @@ export default function BackendPage() {
                   </td>
                 </tr>
                 {tranches.filter(t => {
-                  if (!isCollapsed) return true
+                  if (isCollapsed) return false   // collapsed = header only, no rows
                   const p = prices[`${s.series_number}:${t.tranche_name}`]
-                  return p?.bid != null || p?.ask != null
+                  const hasPrice = p?.bid != null || p?.ask != null
+                  return showEmptyRows ? true : hasPrice
                 }).map((t, tIdx) => {
                   const rowKey = `${s.series_number}:${t.tranche_name}`
                   const price = prices[rowKey]
