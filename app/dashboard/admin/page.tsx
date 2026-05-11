@@ -295,7 +295,7 @@ export default function AdminPage() {
     'px-3 py-1 text-xs border border-[#333] text-[#555] rounded-[3px] cursor-pointer'
   const btnEdit =
     'px-3 py-1 text-xs border border-[#f0c04066] text-[#f0c040] hover:border-[#f0c040] rounded-[3px] cursor-pointer'
-  const thClass = 'text-left py-2 pr-6 text-[#555] text-xs font-normal border-b border-[#222]'
+  const thClass = 'text-left py-2 pr-6 text-white text-sm font-bold border-b border-[#222]'
   const tdClass = 'py-2 pr-6 text-xs border-b border-[#1a1a1a]'
 
   return (

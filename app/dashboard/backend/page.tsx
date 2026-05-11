@@ -230,6 +230,7 @@ export default function BackendPage() {
   const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
+  const defaultsApplied = useRef(false)
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
   const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
@@ -333,7 +334,13 @@ export default function BackendPage() {
         supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(200),
       ])
       if (cancelled) return
-      if (sd) setSeries(sd)
+      if (sd) {
+        setSeries(sd)
+        if (!defaultsApplied.current) {
+          setCollapsedSeries(new Set(sd.map((s: SeriesConfig) => s.series_number)))
+          defaultsApplied.current = true
+        }
+      }
       if (td) setTranches(td)
       if (tr) {
         setBlotterTrades(tr.map((t: any) => ({
@@ -425,6 +432,7 @@ export default function BackendPage() {
     const px = prices[rowKey]?.bid ?? null
     const passiveDealer = prices[rowKey]?.bid_dealer ?? null
     const sz = prices[rowKey]?.bid_size ?? null
+    if (px == null) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('No bid posted on this tranche'); return }
     if (dealer === passiveDealer) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError(`${dealer} cannot hit their own price`); return }
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
@@ -440,6 +448,7 @@ export default function BackendPage() {
     const px = prices[rowKey]?.ask ?? null
     const passiveDealer = prices[rowKey]?.ask_dealer ?? null
     const sz = prices[rowKey]?.ask_size ?? null
+    if (px == null) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('No offer posted on this tranche'); return }
     if (dealer === passiveDealer) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError(`${dealer} cannot lift their own price`); return }
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
@@ -704,14 +713,14 @@ export default function BackendPage() {
       <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
           <thead>
-            <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-              <th style={{ textAlign: 'left', padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 400 }}>TRANCHE</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>SIZE</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 400 }}>BID</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 400 }}>OFFER</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>SIZE</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 400 }}>LST TRADE PX</th>
-              <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 400 }}>CHG</th>
+            <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+              <th style={{ textAlign: 'left', padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
+              <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
             </tr>
           </thead>
           <tbody>
@@ -769,8 +778,8 @@ export default function BackendPage() {
 
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
-                      <span style={{ color: price?.bid != null ? '#66ff88' : '#2a2a2a' }}>
-                        {price?.bid != null ? String(price.bid) : '—'}
+                      <span style={{ color: price?.bid != null ? '#ffffff' : '#2a2a2a' }}>
+                        {price?.bid != null ? (priceMode === 'price' ? `$${price.bid}` : String(price.bid)) : '—'}
                       </span>
                       {price?.bid != null && bidTag && (
                         <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
@@ -782,8 +791,8 @@ export default function BackendPage() {
 
                   const askCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
-                      <span style={{ color: price?.ask != null ? '#ff6666' : '#2a2a2a' }}>
-                        {price?.ask != null ? String(price.ask) : '—'}
+                      <span style={{ color: price?.ask != null ? '#ffffff' : '#2a2a2a' }}>
+                        {price?.ask != null ? (priceMode === 'price' ? `$${price.ask}` : String(price.ask)) : '—'}
                       </span>
                       {price?.ask != null && askTag && (
                         <span style={{ background: askTag.bg, color: askTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
