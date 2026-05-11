@@ -53,8 +53,8 @@ interface MarketContext {
   date: string
   spx_close: number | null
   vix_close: number | null
-  hyg_close: number | null
   cdx_hy_spread: number | null
+  cdx_ig_spread: number | null
 }
 
 function getStartDate(range: DateRange): string | null {
@@ -76,13 +76,6 @@ function fmtDate(ts: string) {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     month: 'short', day: 'numeric',
-  }).format(new Date(ts))
-}
-
-function fmtDateFull(ts: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    month: 'short', day: 'numeric', year: 'numeric',
   }).format(new Date(ts))
 }
 
@@ -193,7 +186,7 @@ export default function HistoryPage() {
 
     let ctxQ = supabase
       .from('market_context')
-      .select('date, spx_close, vix_close, hyg_close, cdx_hy_spread')
+      .select('date, spx_close, vix_close, cdx_hy_spread, cdx_ig_spread')
       .order('date', { ascending: true })
       .limit(400)
 
@@ -237,7 +230,6 @@ export default function HistoryPage() {
 
   // ── CMBX chart: all bid/ask entries + trades for selected tranche ─────────────
   const cmbxChartData = useMemo(() => {
-    // Build unified sorted timeline
     type Evt = { ts: string; bid: number | null; ask: number | null; trade: number | null }
     const events: Evt[] = [
       ...chartPriceChanges.map(pc => ({
@@ -249,7 +241,7 @@ export default function HistoryPage() {
       ...chartTrades.map(t => ({ ts: t.created_at, bid: null, ask: null, trade: t.price })),
     ].sort((a, b) => a.ts.localeCompare(b.ts))
 
-    const labels    = events.map(e => fmtTime(e.ts))
+    const labels = events.map(e => fmtTime(e.ts))
     return {
       labels,
       datasets: [
@@ -294,33 +286,33 @@ export default function HistoryPage() {
   const spxChartData = useMemo(() => ({
     labels: marketCtx.map(m => fmtDate(m.date + 'T12:00:00')),
     datasets: [{
-      label: 'SPX close',
+      label: 'SPX',
       data: marketCtx.map(m => m.spx_close),
       borderColor: '#3388ff', backgroundColor: 'transparent',
       borderWidth: 1.5, pointRadius: 2, tension: 0.1,
     }],
   }), [marketCtx])
 
-  // ── HYG + VIX chart ──────────────────────────────────────────────────────────
-  const hygVixChartData = useMemo(() => ({
+  // ── CDX HY + CDX IG chart ────────────────────────────────────────────────────
+  const cdxChartData = useMemo(() => ({
     labels: marketCtx.map(m => fmtDate(m.date + 'T12:00:00')),
     datasets: [
       {
-        label: 'HYG',
-        data: marketCtx.map(m => m.hyg_close),
+        label: 'CDX HY',
+        data: marketCtx.map(m => m.cdx_hy_spread),
         borderColor: '#eebb00', backgroundColor: 'transparent',
         borderWidth: 1.5, pointRadius: 2, tension: 0.1, yAxisID: 'y',
       },
       {
-        label: 'VIX',
-        data: marketCtx.map(m => m.vix_close),
-        borderColor: '#bb55ee', backgroundColor: 'transparent',
+        label: 'CDX IG',
+        data: marketCtx.map(m => m.cdx_ig_spread),
+        borderColor: '#44ddaa', backgroundColor: 'transparent',
         borderWidth: 1.5, pointRadius: 2, tension: 0.1, yAxisID: 'y1',
       },
     ],
   }), [marketCtx])
 
-  const hygVixChartOptions = useMemo(() => ({
+  const cdxChartOptions = useMemo(() => ({
     ...baseChartOptions,
     scales: {
       ...baseChartOptions.scales,
@@ -365,7 +357,7 @@ export default function HistoryPage() {
         {loading && <span style={{ color: '#3a3a3a', fontSize: '11px', marginLeft: '8px' }}>LOADING...</span>}
         {noMarketData && (
           <span style={{ color: '#554400', fontSize: '11px', marginLeft: '12px' }}>
-            ⚠ no SPX/HYG data — set SUPABASE_URL + SUPABASE_KEY in GitHub Secrets, then run workflow
+            ⚠ no CDX/SPX data — run bloomberg_agent/market_data_puller.py (CDX) or trigger GitHub Actions (SPX)
           </span>
         )}
         {selectedChartKey && (
@@ -382,7 +374,7 @@ export default function HistoryPage() {
         {/* ── LEFT 60%: tables ──────────────────────────────────────────────── */}
         <div style={{ width: '60%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #1a1a1a', overflow: 'hidden' }}>
 
-          {/* Table 1: Price Activity (all bid/ask entries) */}
+          {/* Table 1: Price Activity */}
           <div style={{ flex: '0 0 50%', overflow: 'auto', borderBottom: '1px solid #1a1a1a' }}>
             <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>PRICE ACTIVITY</span>
@@ -400,16 +392,17 @@ export default function HistoryPage() {
                   <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
                   <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DEALER</th>
                   <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
-                  <th style={{ textAlign: 'center',padding: '4px 6px',  borderBottom: '2px solid #888', fontWeight: 700 }}>SIDE</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>PRICE</th>
+                  <th style={{ textAlign: 'center',padding: '4px 6px',  borderBottom: '2px solid #888',    fontWeight: 700 }}>SIDE</th>
+                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SPREAD</th>
                   <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                  <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #eebb00', fontWeight: 700 }}>HYG</th>
+                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #eebb00', fontWeight: 700 }}>CDX HY</th>
+                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #44ddaa', fontWeight: 700 }}>CDX IG</th>
+                  <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
                 </tr>
               </thead>
               <tbody>
                 {priceChanges.length === 0 ? (
-                  <tr><td colSpan={9} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no price activity for selected range</td></tr>
+                  <tr><td colSpan={10} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no price activity for selected range</td></tr>
                 ) : priceChanges.map((pc, i) => {
                   const key = `${pc.series_number}:${pc.tranche_name}`
                   const isSelected = key === selectedChartKey
@@ -431,8 +424,9 @@ export default function HistoryPage() {
                         {pc.price != null ? (pc.mode === 'price' ? `$${pc.price}` : String(pc.price)) : '—'}
                       </td>
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.spx_close  != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close  != null ? ctx.spx_close.toLocaleString()      : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.hyg_close  != null ? '#eebb00' : '#2a2a2a' }}>{ctx?.hyg_close  != null ? ctx.hyg_close.toFixed(2)            : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_hy_spread != null ? '#eebb00' : '#2a2a2a' }}>{ctx?.cdx_hy_spread != null ? ctx.cdx_hy_spread.toFixed(1) : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_ig_spread != null ? '#44ddaa' : '#2a2a2a' }}>{ctx?.cdx_ig_spread != null ? ctx.cdx_ig_spread.toFixed(1) : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close    != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close    != null ? ctx.spx_close.toLocaleString()   : '—'}</td>
                     </tr>
                   )
                 })}
@@ -452,24 +446,20 @@ export default function HistoryPage() {
                   <th style={{ textAlign: 'left',  padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
                   <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
                   <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
-                  <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>BUYER</th>
-                  <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SELLER</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>PRICE</th>
+                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
                   <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                  <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #eebb00', fontWeight: 700 }}>HYG</th>
+                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #eebb00', fontWeight: 700 }}>CDX HY</th>
+                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #44ddaa', fontWeight: 700 }}>CDX IG</th>
+                  <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
                 </tr>
               </thead>
               <tbody>
                 {trades.length === 0 ? (
-                  <tr><td colSpan={9} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no trades for selected range</td></tr>
+                  <tr><td colSpan={8} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no trades for selected range</td></tr>
                 ) : trades.map((t, i) => {
                   const key = `${t.series_number}:${t.tranche_name}`
                   const isSelected = key === selectedChartKey
                   const ctx = ctxByDate[t.created_at.split('T')[0]]
-                  // LIFT: dealer = buyer; HIT: passive_dealer = buyer
-                  const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
-                  const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                   return (
                     <tr key={t.id} onClick={() => setSelectedChartKey(key)} style={{
                       background: isSelected ? '#111100' : i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
@@ -480,12 +470,13 @@ export default function HistoryPage() {
                       <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
                       <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
                       <td style={{ padding: '3px 6px',  color: isSelected ? '#f0c040' : '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
-                      <td style={{ padding: '3px 6px',  color: '#66ff88', fontWeight: 700 }}>{buyer  ?? '—'}</td>
-                      <td style={{ padding: '3px 6px',  color: '#ff6666', fontWeight: 700 }}>{seller ?? '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#f0c040', fontWeight: 700 }}>{t.price ?? <span style={{ color: '#2a2a2a' }}>—</span>}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#f0c040', fontWeight: 700 }}>
+                        {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
+                      </td>
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.hyg_close != null ? '#eebb00' : '#2a2a2a' }}>{ctx?.hyg_close != null ? ctx.hyg_close.toFixed(2)       : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_hy_spread != null ? '#eebb00' : '#2a2a2a' }}>{ctx?.cdx_hy_spread != null ? ctx.cdx_hy_spread.toFixed(1) : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_ig_spread != null ? '#44ddaa' : '#2a2a2a' }}>{ctx?.cdx_ig_spread != null ? ctx.cdx_ig_spread.toFixed(1) : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close    != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close    != null ? ctx.spx_close.toLocaleString()   : '—'}</td>
                     </tr>
                   )
                 })}
@@ -522,16 +513,16 @@ export default function HistoryPage() {
             </div>
           </div>
 
-          {/* Chart 3: HYG + VIX */}
+          {/* Chart 3: CDX HY + CDX IG */}
           <div style={{ flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ flexShrink: 0, marginBottom: '4px' }}>
-              <span style={{ color: '#eebb00', fontSize: '10px', letterSpacing: '1px' }}>HYG</span>
+              <span style={{ color: '#eebb00', fontSize: '10px', letterSpacing: '1px' }}>CDX HY</span>
               <span style={{ color: '#2a2a2a', fontSize: '10px' }}> / </span>
-              <span style={{ color: '#bb55ee', fontSize: '10px', letterSpacing: '1px' }}>VIX</span>
-              {noMarketData && <span style={{ color: '#333', fontSize: '10px', marginLeft: '8px' }}>no data</span>}
+              <span style={{ color: '#44ddaa', fontSize: '10px', letterSpacing: '1px' }}>CDX IG</span>
+              {noMarketData && <span style={{ color: '#333', fontSize: '10px', marginLeft: '8px' }}>no data — run market_data_puller.py</span>}
             </div>
             <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              <Line data={hygVixChartData} options={hygVixChartOptions} />
+              <Line data={cdxChartData} options={cdxChartOptions} />
             </div>
           </div>
         </div>

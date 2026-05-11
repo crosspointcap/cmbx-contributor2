@@ -1,11 +1,12 @@
 """
 fetch_market_data.py
 ────────────────────
-Fetches SPX, VIX, and HYG from Yahoo Finance (no API key needed) and
-upserts into Supabase market_context table.
+Fetches SPX and VIX from Yahoo Finance (no API key needed) and upserts into
+Supabase market_context table.
 
-CDX HY spread is NOT fetched here — that requires Bloomberg Terminal.
-Run bloomberg_agent/market_data_puller.py locally to fill in CDX HY.
+CDX HY and CDX IG spreads require Bloomberg Terminal — they are fetched by
+bloomberg_agent/market_data_puller.py running locally. This script preserves
+any CDX values already written by that agent (does not overwrite with null).
 
 Run by GitHub Actions every hour Mon–Fri 8am–6pm ET.
 Also runnable locally: python scripts/fetch_market_data.py
@@ -32,7 +33,6 @@ sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 TICKERS = {
     'spx': '^GSPC',
     'vix': '^VIX',
-    'hyg': 'HYG',
 }
 
 HEADERS = {
@@ -67,15 +67,16 @@ def main():
 
     spx = fetch_yahoo(TICKERS['spx'])
     vix = fetch_yahoo(TICKERS['vix'])
-    hyg = fetch_yahoo(TICKERS['hyg'])
 
-    print(f'[INFO] SPX={spx["last"]}  VIX={vix["last"]}  HYG={hyg["last"]}')
+    print(f'[INFO] SPX={spx["last"]}  VIX={vix["last"]}')
 
-    # Preserve existing CDX HY — don't overwrite it with null
-    existing = sb.table('market_context').select('cdx_hy_spread').eq('date', today).execute()
-    existing_cdx = None
+    # Preserve existing CDX HY/IG written by bloomberg_agent — don't overwrite with null
+    existing = sb.table('market_context').select('cdx_hy_spread, cdx_ig_spread').eq('date', today).execute()
+    existing_cdx_hy = None
+    existing_cdx_ig = None
     if existing.data:
-        existing_cdx = existing.data[0].get('cdx_hy_spread')
+        existing_cdx_hy = existing.data[0].get('cdx_hy_spread')
+        existing_cdx_ig = existing.data[0].get('cdx_ig_spread')
 
     row = {
         'date':          today,
@@ -83,8 +84,8 @@ def main():
         'spx_high':      spx['high'],
         'spx_low':       spx['low'],
         'vix_close':     vix['last'],
-        'hyg_close':     hyg['last'],
-        'cdx_hy_spread': existing_cdx,
+        'cdx_hy_spread': existing_cdx_hy,
+        'cdx_ig_spread': existing_cdx_ig,
     }
 
     sb.table('market_context').upsert(row, on_conflict='date').execute()
