@@ -9,8 +9,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const DATE_RANGES = ['1D', '1W', '1M', '3M', 'ALL'] as const
-type DateRange = typeof DATE_RANGES[number]
+const QUICK_RANGES = ['1D', '1W', '1M', '3M', 'ALL'] as const
+type QuickRange = typeof QUICK_RANGES[number]
 
 interface PriceChange {
   id: string
@@ -22,8 +22,6 @@ interface PriceChange {
   price: number | null
   size: number | null
   mode: string | null
-  cdx_hy: number | null
-  cdx_ig: number | null
 }
 
 interface TradeRow {
@@ -41,11 +39,9 @@ interface TradeRow {
 interface MarketContext {
   date: string
   spx_close: number | null
-  cdx_hy_spread: number | null
-  cdx_ig_spread: number | null
 }
 
-function getStartDate(range: DateRange): string | null {
+function getStartDate(range: QuickRange): string | null {
   if (range === 'ALL') return null
   const days: Record<string, number> = { '1D': 1, '1W': 7, '1M': 30, '3M': 90 }
   const d = new Date()
@@ -85,17 +81,27 @@ const DEALER_COLORS: Record<string, string> = {
   GS: '#ffcc44', UBS: '#ff88cc', BNP: '#8888ff', DB: '#88ccff', BARC: '#ffaa66',
 }
 
+const DATE_INPUT_STYLE: React.CSSProperties = {
+  background: '#111', color: '#aaa', padding: '1px 6px',
+  fontSize: '11px', fontFamily: 'Courier New, monospace',
+  borderRadius: '2px', outline: 'none', colorScheme: 'dark' as any,
+}
 
 export default function HistoryPage() {
-  const [dateRange,        setDateRange]        = useState<DateRange>('1D')
-  const [priceChanges,     setPriceChanges]     = useState<PriceChange[]>([])
-  const [trades,           setTrades]           = useState<TradeRow[]>([])
-  const [marketCtx,        setMarketCtx]        = useState<MarketContext[]>([])
-  const [loading,          setLoading]          = useState(false)
-  const [isTrader,         setIsTrader]         = useState(false)
-  const [myDealerCode,     setMyDealerCode]     = useState<string | null>(null)
+  const [quickRange,   setQuickRange]   = useState<QuickRange>('1D')
+  const [customFrom,   setCustomFrom]   = useState('')   // YYYY-MM-DD
+  const [customTo,     setCustomTo]     = useState('')   // YYYY-MM-DD
+  const [searchText,   setSearchText]   = useState('')
+  const [priceChanges, setPriceChanges] = useState<PriceChange[]>([])
+  const [trades,       setTrades]       = useState<TradeRow[]>([])
+  const [marketCtx,    setMarketCtx]    = useState<MarketContext[]>([])
+  const [loading,      setLoading]      = useState(false)
+  const [isTrader,     setIsTrader]     = useState(false)
+  const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
 
-  // ── Check role + own dealer code ─────────────────────────────────────────────
+  const usingCustomRange = !!(customFrom && customTo)
+
+  // ── Check role ───────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
@@ -107,7 +113,7 @@ export default function HistoryPage() {
     })
   }, [])
 
-  // ── Realtime: new price changes + trades appear live; clears sync ─────────────
+  // ── Realtime: new entries stream in live ─────────────────────────────────────
   useEffect(() => {
     const ch = supabase
       .channel(`history-rt-${Math.random().toString(36).slice(2)}`)
@@ -117,7 +123,6 @@ export default function HistoryPage() {
           id: pc.id, created_at: pc.created_at,
           series_number: pc.series_number, tranche_name: pc.tranche_name,
           dealer: pc.dealer, side: pc.side, price: pc.price, size: pc.size, mode: pc.mode,
-          cdx_hy: pc.cdx_hy ?? null, cdx_ig: pc.cdx_ig ?? null,
         }, ...prev])
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
@@ -139,22 +144,18 @@ export default function HistoryPage() {
       .on('broadcast', { event: 'blotter-cleared' }, () => setTrades([]))
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(ch)
-      supabase.removeChannel(broadcastCh)
-    }
+    return () => { supabase.removeChannel(ch); supabase.removeChannel(broadcastCh) }
   }, [])
 
-  // ── Load data when date range changes ─────────────────────────────────────────
-  useEffect(() => { loadData() }, [dateRange]) // eslint-disable-line react-hooks/exhaustive-deps
+  // ── Initial load ─────────────────────────────────────────────────────────────
+  useEffect(() => { loadData(getStartDate('1D'), null) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function loadData() {
+  async function loadData(startDate: string | null, endDate: string | null) {
     setLoading(true)
-    const startDate = getStartDate(dateRange)
 
     let pcQ = supabase
       .from('price_changes')
-      .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode, cdx_hy, cdx_ig')
+      .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode')
       .order('created_at', { ascending: false })
       .limit(2000)
 
@@ -166,7 +167,7 @@ export default function HistoryPage() {
 
     let ctxQ = supabase
       .from('market_context')
-      .select('date, spx_close, cdx_hy_spread, cdx_ig_spread')
+      .select('date, spx_close')
       .order('date', { ascending: true })
       .limit(400)
 
@@ -175,27 +176,67 @@ export default function HistoryPage() {
       trQ  = trQ.gte('created_at', startDate + 'T00:00:00')
       ctxQ = ctxQ.gte('date', startDate)
     }
+    if (endDate) {
+      pcQ  = pcQ.lte('created_at', endDate + 'T23:59:59')
+      trQ  = trQ.lte('created_at', endDate + 'T23:59:59')
+      ctxQ = ctxQ.lte('date', endDate)
+    }
 
     const [{ data: pd }, { data: td }, { data: cd }] = await Promise.all([pcQ, trQ, ctxQ])
-
     if (pd) setPriceChanges(pd)
     if (td) setTrades(td)
     if (cd) setMarketCtx(cd)
     setLoading(false)
   }
 
-  // ── Delete a price_changes entry (trader only) ───────────────────────────────
+  function handleQuickRange(r: QuickRange) {
+    setQuickRange(r)
+    setCustomFrom('')
+    setCustomTo('')
+    loadData(getStartDate(r), null)
+  }
+
+  function handleCustomGo() {
+    if (!customFrom || !customTo) return
+    loadData(customFrom, customTo)
+  }
+
+  function handleClearCustom() {
+    setCustomFrom('')
+    setCustomTo('')
+    loadData(getStartDate(quickRange), null)
+  }
+
   async function deletePriceChange(id: string) {
     const { error } = await supabase.from('price_changes').delete().eq('id', id)
     if (!error) setPriceChanges(prev => prev.filter(pc => pc.id !== id))
   }
 
-  // ── Build date → market context lookup ───────────────────────────────────────
   const ctxByDate = useMemo(() => {
     const map: Record<string, MarketContext> = {}
     for (const c of marketCtx) map[c.date] = c
     return map
   }, [marketCtx])
+
+  // ── Client-side search filter (tranche name, series, dealer) ─────────────────
+  const q = searchText.trim().toLowerCase()
+
+  const filteredPriceChanges = useMemo(() => {
+    if (!q) return priceChanges
+    return priceChanges.filter(pc =>
+      `cmbx.${pc.series_number}.${pc.tranche_name}`.toLowerCase().includes(q) ||
+      (pc.dealer ?? '').toLowerCase().includes(q) ||
+      pc.tranche_name.toLowerCase().includes(q)
+    )
+  }, [priceChanges, q])
+
+  const filteredTrades = useMemo(() => {
+    if (!q) return trades
+    return trades.filter(t =>
+      `cmbx.${t.series_number}.${t.tranche_name}`.toLowerCase().includes(q) ||
+      t.tranche_name.toLowerCase().includes(q)
+    )
+  }, [trades, q])
 
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -217,144 +258,182 @@ export default function HistoryPage() {
       <NavTabs active="history" isTrader={isTrader} />
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, background: '#080808' }}>
-        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px', marginRight: '4px' }}>RANGE</span>
-        {DATE_RANGES.map(r => (
-          <button key={r} onClick={() => setDateRange(r)} style={{
-            background: dateRange === r ? '#1a1500' : 'transparent',
-            color: dateRange === r ? '#f0c040' : '#3a3a3a',
-            border: `1px solid ${dateRange === r ? '#f0c040' : '#222'}`,
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, background: '#080808', flexWrap: 'wrap' }}>
+
+        {/* Quick range buttons */}
+        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>RANGE</span>
+        {QUICK_RANGES.map(r => (
+          <button key={r} onClick={() => handleQuickRange(r)} style={{
+            background: !usingCustomRange && quickRange === r ? '#1a1500' : 'transparent',
+            color:      !usingCustomRange && quickRange === r ? '#f0c040' : '#3a3a3a',
+            border:    `1px solid ${!usingCustomRange && quickRange === r ? '#f0c040' : '#222'}`,
+            fontWeight: !usingCustomRange && quickRange === r ? 700 : 400,
             padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
-            cursor: 'pointer', borderRadius: '2px', fontWeight: dateRange === r ? 700 : 400,
+            cursor: 'pointer', borderRadius: '2px',
           }}>{r}</button>
         ))}
-        {loading && <span style={{ color: '#3a3a3a', fontSize: '11px', marginLeft: '8px' }}>LOADING...</span>}
+
+        <span style={{ color: '#2a2a2a', padding: '0 2px' }}>|</span>
+
+        {/* Custom date range */}
+        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>FROM</span>
+        <input
+          type="date"
+          value={customFrom}
+          onChange={e => setCustomFrom(e.target.value)}
+          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? '#f0c040' : '#2a2a2a'}` }}
+        />
+        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>TO</span>
+        <input
+          type="date"
+          value={customTo}
+          onChange={e => setCustomTo(e.target.value)}
+          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? '#f0c040' : '#2a2a2a'}` }}
+        />
+        <button
+          onClick={handleCustomGo}
+          disabled={!customFrom || !customTo}
+          style={{
+            background: customFrom && customTo ? '#1a1500' : 'transparent',
+            color:      customFrom && customTo ? '#f0c040' : '#333',
+            border:    `1px solid ${customFrom && customTo ? '#f0c040' : '#222'}`,
+            padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
+            cursor: customFrom && customTo ? 'pointer' : 'default', borderRadius: '2px',
+          }}
+        >GO</button>
+        {usingCustomRange && (
+          <button
+            onClick={handleClearCustom}
+            style={{ background: 'transparent', color: '#555', border: '1px solid #222', padding: '2px 8px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}
+          >✕ CLEAR</button>
+        )}
+
+        <span style={{ color: '#2a2a2a', padding: '0 2px' }}>|</span>
+
+        {/* Search */}
+        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>SEARCH</span>
+        <input
+          type="text"
+          placeholder="tranche · dealer · series..."
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${q ? '#555' : '#2a2a2a'}`, width: '190px', color: q ? '#ccc' : '#555' }}
+        />
+        {q && (
+          <button
+            onClick={() => setSearchText('')}
+            style={{ background: 'transparent', color: '#555', border: 'none', cursor: 'pointer', fontSize: '11px', fontFamily: 'Courier New, monospace', padding: '0 2px' }}
+          >✕</button>
+        )}
+
+        {loading && <span style={{ color: '#3a3a3a', fontSize: '11px', marginLeft: '4px' }}>LOADING...</span>}
       </div>
 
-      {/* Main content */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      {/* Tables */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-        {/* ── Tables ────────────────────────────────────────────────────────── */}
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-          {/* Table 1: Price Activity */}
-          <div style={{ flex: '0 0 50%', overflow: 'auto', borderBottom: '1px solid #1a1a1a' }}>
-            <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>PRICE ACTIVITY</span>
-              <span style={{ color: '#3a3a3a', fontSize: '11px' }}>{priceChanges.length} entries</span>
-              {priceChanges.length === 0 && !loading && (
-                <span style={{ color: '#443300', fontSize: '10px', marginLeft: '8px' }}>
-                  — prices entered on the ADMIN page will appear here
-                </span>
-              )}
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-              <thead>
-                <tr style={{ color: '#fff', fontSize: '12px', position: 'sticky', top: '26px', background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-                  <th style={{ textAlign: 'left',  padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
-                  <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
-                  <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DEALER</th>
-                  <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
-                  <th style={{ textAlign: 'center',padding: '4px 6px',  borderBottom: '2px solid #888',    fontWeight: 700 }}>SIDE</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SPREAD</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #eebb00', fontWeight: 700 }}>CDX HY</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #44ddaa', fontWeight: 700 }}>CDX IG</th>
-                  <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                  {isTrader && <th style={{ padding: '4px 8px', borderBottom: '1px solid #1a1a1a' }}></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {priceChanges.length === 0 ? (
-                  <tr><td colSpan={isTrader ? 11 : 10} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no price activity for selected range</td></tr>
-                ) : priceChanges.map((pc, i) => {
-                  const ctx = ctxByDate[pc.created_at.split('T')[0]]
-                  // Use CDX stamped directly on the row (exact moment); fall back to daily ctx for older rows
-                  const pcCdxHy = pc.cdx_hy ?? ctx?.cdx_hy_spread ?? null
-                  const pcCdxIg = pc.cdx_ig ?? ctx?.cdx_ig_spread ?? null
-                  // Traders see all dealer names; dealers only see their own
-                  const canSeeDealer = isTrader || pc.dealer === myDealerCode
-                  const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
-                  const dealerColor = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
-                  return (
-                    <tr key={pc.id} style={{
-                      background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
-                      borderBottom: '1px solid #141414',
-                    }}>
-                      <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(pc.created_at)}</td>
-                      <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(pc.created_at)}</td>
-                      <td style={{ padding: '3px 6px',  color: dealerColor, fontWeight: 700 }}>{visibleDealer}</td>
-                      <td style={{ padding: '3px 6px',  color: '#aaa' }}>CMBX.{pc.series_number}.{pc.tranche_name}</td>
-                      <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px', color: '#fff' }}>
-                        {formatPx(pc.price, pc.mode)}
-                      </td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: pcCdxHy != null ? '#eebb00' : '#2a2a2a' }}>{pcCdxHy != null ? pcCdxHy.toFixed(1) : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: pcCdxIg != null ? '#44ddaa' : '#2a2a2a' }}>{pcCdxIg != null ? pcCdxIg.toFixed(1) : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
-                      {isTrader && (
-                        <td style={{ padding: '3px 6px', textAlign: 'center' }}>
-                          <button
-                            onClick={e => { e.stopPropagation(); deletePriceChange(pc.id) }}
-                            style={{ background: 'transparent', border: 'none', color: '#442222', cursor: 'pointer', fontSize: '13px', padding: '0 4px', fontFamily: 'Courier New', lineHeight: 1 }}
-                            onMouseEnter={e => (e.currentTarget.style.color = '#ff4444')}
-                            onMouseLeave={e => (e.currentTarget.style.color = '#442222')}
-                          >×</button>
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+        {/* Table 1: Price Activity */}
+        <div style={{ flex: '0 0 50%', overflow: 'auto', borderBottom: '1px solid #1a1a1a' }}>
+          <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>PRICE ACTIVITY</span>
+            <span style={{ color: '#3a3a3a', fontSize: '11px' }}>{filteredPriceChanges.length} entries</span>
+            {q && filteredPriceChanges.length !== priceChanges.length && (
+              <span style={{ color: '#444', fontSize: '10px' }}>({priceChanges.length} total)</span>
+            )}
           </div>
-
-          {/* Table 2: Trade Log */}
-          <div style={{ flex: 1, overflow: 'auto' }}>
-            <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>TRADE LOG</span>
-              <span style={{ color: '#3a3a3a', fontSize: '11px' }}>{trades.length} trades</span>
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-              <thead>
-                <tr style={{ color: '#fff', fontSize: '12px', position: 'sticky', top: '26px', background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-                  <th style={{ textAlign: 'left',  padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
-                  <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
-                  <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #eebb00', fontWeight: 700 }}>CDX HY</th>
-                  <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #44ddaa', fontWeight: 700 }}>CDX IG</th>
-                  <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trades.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no trades for selected range</td></tr>
-                ) : trades.map((t, i) => {
-                  const ctx = ctxByDate[t.created_at.split('T')[0]]
-                  return (
-                    <tr key={t.id} style={{
-                      background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
-                      borderBottom: '1px solid #141414',
-                    }}>
-                      <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
-                      <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
-                      <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#f0c040', fontWeight: 700 }}>
-                        {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ color: '#fff', fontSize: '12px', position: 'sticky', top: '26px', background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+                <th style={{ textAlign: 'left',   padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
+                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
+                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DEALER</th>
+                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
+                <th style={{ textAlign: 'center', padding: '4px 6px',  borderBottom: '2px solid #888',    fontWeight: 700 }}>SIDE</th>
+                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SPREAD</th>
+                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
+                <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
+                {isTrader && <th style={{ padding: '4px 8px', borderBottom: '1px solid #1a1a1a' }} />}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPriceChanges.length === 0 ? (
+                <tr><td colSpan={isTrader ? 9 : 8} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                  {q ? `— no results for "${searchText}"` : '— no price activity for selected range'}
+                </td></tr>
+              ) : filteredPriceChanges.map((pc, i) => {
+                const ctx           = ctxByDate[pc.created_at.split('T')[0]]
+                const canSeeDealer  = isTrader || pc.dealer === myDealerCode
+                const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
+                const dealerColor   = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
+                return (
+                  <tr key={pc.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
+                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(pc.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(pc.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: dealerColor, fontWeight: 700 }}>{visibleDealer}</td>
+                    <td style={{ padding: '3px 6px',  color: '#aaa' }}>CMBX.{pc.series_number}.{pc.tranche_name}</td>
+                    <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
+                    <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
+                    <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
+                    <td style={{ textAlign: 'right',  padding: '3px 12px', color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
+                    {isTrader && (
+                      <td style={{ padding: '3px 6px', textAlign: 'center' }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); deletePriceChange(pc.id) }}
+                          style={{ background: 'transparent', border: 'none', color: '#442222', cursor: 'pointer', fontSize: '13px', padding: '0 4px', fontFamily: 'Courier New', lineHeight: 1 }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#ff4444')}
+                          onMouseLeave={e => (e.currentTarget.style.color = '#442222')}
+                        >×</button>
                       </td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_hy_spread != null ? '#eebb00' : '#2a2a2a' }}>{ctx?.cdx_hy_spread != null ? ctx.cdx_hy_spread.toFixed(1) : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 6px',  color: ctx?.cdx_ig_spread != null ? '#44ddaa' : '#2a2a2a' }}>{ctx?.cdx_ig_spread != null ? ctx.cdx_ig_spread.toFixed(1) : '—'}</td>
-                      <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close    != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close    != null ? ctx.spx_close.toLocaleString()   : '—'}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Table 2: Trade Log */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>TRADE LOG</span>
+            <span style={{ color: '#3a3a3a', fontSize: '11px' }}>{filteredTrades.length} trades</span>
+            {q && filteredTrades.length !== trades.length && (
+              <span style={{ color: '#444', fontSize: '10px' }}>({trades.length} total)</span>
+            )}
           </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ color: '#fff', fontSize: '12px', position: 'sticky', top: '26px', background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+                <th style={{ textAlign: 'left',  padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
+                <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
+                <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
+                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
+                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
+                <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTrades.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                  {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
+                </td></tr>
+              ) : filteredTrades.map((t, i) => {
+                const ctx = ctxByDate[t.created_at.split('T')[0]]
+                return (
+                  <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
+                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
+                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#f0c040', fontWeight: 700 }}>
+                      {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
 
       </div>
