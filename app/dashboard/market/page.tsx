@@ -288,9 +288,9 @@ export default function MarketPage() {
 
   function priceColor(val: number | null, dealer: string | null) {
     if (val == null) return '#2a2a2a'
-    if (myCode && dealer === myCode) return myColor   // own price → brand color (MS = light blue)
-    if (myCode) return '#ff6666'                      // competitor price → red
-    return '#ffffff'                                  // trader view → white
+    if (myCode && dealer === myCode) return myColor              // own price → brand color
+    if (myCode === 'MS' && dealer !== myCode) return '#ff6666'   // MS only: competitors in red
+    return '#ffffff'                                             // all others → white
   }
 
   // Number of visible columns (used for series header colSpan)
@@ -340,12 +340,12 @@ export default function MarketPage() {
               <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
                 <th style={{ textAlign: 'left',  padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '180px', fontWeight: 700 }}>TRANCHE</th>
                 {layout.showSizes && (
-                  <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+                  <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
                 )}
                 <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
                 <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
                 {layout.showSizes && (
-                  <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+                  <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
                 )}
                 {layout.showLast && (
                   <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '130px', fontWeight: 700 }}>LST TRADE PX</th>
@@ -393,27 +393,27 @@ export default function MarketPage() {
 
                       return (
                         <tr key={rowKey} style={{ background: rowBg, borderBottom: '1px solid #161616' }}>
-                          <td style={{ padding: '6px 8px 6px 12px', color: '#ffffff', whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap' }}>
                             CMBX.{s.series_number}.{t.tranche_name}
                           </td>
                           {layout.showSizes && (
-                            <td style={{ textAlign: 'right', padding: '6px 8px', color: price?.bid_size != null ? '#888' : '#2a2a2a' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 8px', color: price?.bid_size != null ? '#888' : '#2a2a2a' }}>
                               {price?.bid_size ?? '—'}
                             </td>
                           )}
-                          <td style={{ textAlign: 'right', padding: '6px 10px', color: bidColor, borderLeft: '2px solid #1a3a1a' }}>
+                          <td style={{ textAlign: 'right', padding: '3px 10px', color: bidColor, borderLeft: '2px solid #1a3a1a' }}>
                             {formatPx(price?.bid, price?.mode)}
                           </td>
-                          <td style={{ textAlign: 'right', padding: '6px 10px', color: askColor, borderLeft: '2px solid #3a1a1a' }}>
+                          <td style={{ textAlign: 'right', padding: '3px 10px', color: askColor, borderLeft: '2px solid #3a1a1a' }}>
                             {formatPx(price?.ask, price?.mode)}
                           </td>
                           {layout.showSizes && (
-                            <td style={{ textAlign: 'right', padding: '6px 8px', color: price?.ask_size != null ? '#888' : '#2a2a2a' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 8px', color: price?.ask_size != null ? '#888' : '#2a2a2a' }}>
                               {price?.ask_size ?? '—'}
                             </td>
                           )}
                           {layout.showLast && (
-                            <td style={{ textAlign: 'right', padding: '6px 12px 6px 8px' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 12px 3px 8px' }}>
                               {price?.last_trade_px != null ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
                                   <span style={{ color: '#888' }}>{formatPx(price.last_trade_px, price.mode)}</span>

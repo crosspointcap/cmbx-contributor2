@@ -797,13 +797,13 @@ export default function BackendPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
           <thead>
             <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-              <th style={{ textAlign: 'left', padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
-              <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
+              <th style={{ textAlign: 'left', padding: '3px 8px 3px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
+              <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+              <th style={{ textAlign: 'right', padding: '3px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
+              <th style={{ textAlign: 'right', padding: '3px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
+              <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+              <th style={{ textAlign: 'right', padding: '3px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
+              <th style={{ textAlign: 'right', padding: '3px 12px 3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
             </tr>
           </thead>
           <tbody>
@@ -895,14 +895,14 @@ export default function BackendPage() {
                       onClick={() => setSelectedRow(prev => prev === rowKey ? null : rowKey)}
                       style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
                     >
-                      <td style={{ padding: '6px 8px 6px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
+                      <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
                         CMBX.{s.series_number}.{t.tranche_name}
                       </td>
-                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'right', padding: '6px 8px' })}
-                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'right', padding: '6px 10px', borderLeft: '2px solid #1a3a1a' })}
-                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'right', padding: '6px 10px', borderLeft: '2px solid #3a1a1a' })}
-                      {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'right', padding: '6px 8px' })}
-                      <td style={{ textAlign: 'right', padding: '6px 10px' }}>
+                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'right', padding: '3px 8px' })}
+                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'right', padding: '3px 10px', borderLeft: '2px solid #1a3a1a' })}
+                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'right', padding: '3px 10px', borderLeft: '2px solid #3a1a1a' })}
+                      {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'right', padding: '3px 8px' })}
+                      <td style={{ textAlign: 'right', padding: '3px 10px' }}>
                         {price?.last_trade_px != null ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
                             <span style={{ color: '#888' }}>{formatPx(price.last_trade_px, price.mode)}</span>
@@ -912,7 +912,7 @@ export default function BackendPage() {
                           </div>
                         ) : <span style={{ color: '#2a2a2a' }}>—</span>}
                       </td>
-                      <td style={{ textAlign: 'right', padding: '6px 12px 6px 8px', color: '#2a2a2a' }}>—</td>
+                      <td style={{ textAlign: 'right', padding: '3px 12px 3px 8px', color: '#2a2a2a' }}>—</td>
                     </tr>
                   )
                 })}
