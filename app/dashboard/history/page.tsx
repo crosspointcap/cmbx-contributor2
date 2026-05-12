@@ -38,6 +38,11 @@ interface TradeRow {
   spx_at_time: number | null
 }
 
+interface DailyClose {
+  date: string
+  spx_close: number | null
+}
+
 function getStartDate(range: QuickRange): string | null {
   if (range === 'ALL') return null
   const days: Record<string, number> = { '1D': 1, '1W': 7, '1M': 30, '3M': 90 }
@@ -91,6 +96,7 @@ export default function HistoryPage() {
   const [searchText,   setSearchText]   = useState('')
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([])
   const [trades,       setTrades]       = useState<TradeRow[]>([])
+  const [dailyCloses,  setDailyCloses]  = useState<DailyClose[]>([])
   const [loading,      setLoading]      = useState(false)
   const [isTrader,     setIsTrader]     = useState(false)
   const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
@@ -163,18 +169,27 @@ export default function HistoryPage() {
       .order('created_at', { ascending: false })
       .limit(500)
 
+    let ctxQ = supabase
+      .from('market_context')
+      .select('date, spx_close')
+      .order('date', { ascending: true })
+      .limit(400)
+
     if (startDate) {
-      pcQ = pcQ.gte('created_at', startDate + 'T00:00:00')
-      trQ = trQ.gte('created_at', startDate + 'T00:00:00')
+      pcQ  = pcQ.gte('created_at', startDate + 'T00:00:00')
+      trQ  = trQ.gte('created_at', startDate + 'T00:00:00')
+      ctxQ = ctxQ.gte('date', startDate)
     }
     if (endDate) {
-      pcQ = pcQ.lte('created_at', endDate + 'T23:59:59')
-      trQ = trQ.lte('created_at', endDate + 'T23:59:59')
+      pcQ  = pcQ.lte('created_at', endDate + 'T23:59:59')
+      trQ  = trQ.lte('created_at', endDate + 'T23:59:59')
+      ctxQ = ctxQ.lte('date', endDate)
     }
 
-    const [{ data: pd }, { data: td }] = await Promise.all([pcQ, trQ])
+    const [{ data: pd }, { data: td }, { data: cd }] = await Promise.all([pcQ, trQ, ctxQ])
     if (pd) setPriceChanges(pd)
     if (td) setTrades(td)
+    if (cd) setDailyCloses(cd)
     setLoading(false)
   }
 
@@ -199,6 +214,18 @@ export default function HistoryPage() {
   async function deletePriceChange(id: string) {
     const { error } = await supabase.from('price_changes').delete().eq('id', id)
     if (!error) setPriceChanges(prev => prev.filter(pc => pc.id !== id))
+  }
+
+  // ── SPX lookup: exact stamp if available, fall back to EOD close by date ──
+  const spxByDate = useMemo(() => {
+    const map: Record<string, number | null> = {}
+    for (const c of dailyCloses) map[c.date] = c.spx_close
+    return map
+  }, [dailyCloses])
+
+  function spxFor(ts: string, spx_at_time: number | null): number | null {
+    if (spx_at_time != null) return spx_at_time          // exact intraday stamp
+    return spxByDate[ts.split('T')[0]] ?? null            // fall back to EOD close
   }
 
   // ── Client-side search filter ─────────────────────────────────────────────
@@ -349,9 +376,11 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
-                    <td style={{ textAlign: 'right',  padding: '3px 12px', color: pc.spx_at_time != null ? '#3388ff' : '#2a2a2a' }}>
-                      {pc.spx_at_time != null ? pc.spx_at_time.toLocaleString() : '—'}
-                    </td>
+                    {(() => { const spx = spxFor(pc.created_at, pc.spx_at_time); return (
+                      <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                        {spx != null ? spx.toLocaleString() : '—'}
+                      </td>
+                    ) })()}
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
                         <button
@@ -415,9 +444,11 @@ export default function HistoryPage() {
                       {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: t.spx_at_time != null ? '#3388ff' : '#2a2a2a' }}>
-                      {t.spx_at_time != null ? t.spx_at_time.toLocaleString() : '—'}
-                    </td>
+                    {(() => { const spx = spxFor(t.created_at, t.spx_at_time); return (
+                      <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                        {spx != null ? spx.toLocaleString() : '—'}
+                      </td>
+                    ) })()}
                   </tr>
                 )
               })}
