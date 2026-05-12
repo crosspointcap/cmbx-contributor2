@@ -277,8 +277,7 @@ export default function BackendPage() {
   const selectedDealerRef   = useRef(selectedDealer)
   const selectedRowRef      = useRef(selectedRow)
   const blotterBroadcastRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
-  const latestCdxHyRef      = useRef<number | null>(null)
-  const latestCdxIgRef      = useRef<number | null>(null)
+  const latestSpxRef        = useRef<number | null>(null)
   selectedDealerRef.current = selectedDealer
   selectedRowRef.current    = selectedRow
 
@@ -359,7 +358,7 @@ export default function BackendPage() {
         supabase.from('prices').select('*'),
         supabase.from('agent_heartbeat').select('*').limit(1).single(),
         supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(200),
-        supabase.from('market_context').select('cdx_hy_spread, cdx_ig_spread').order('date', { ascending: false }).limit(1).single(),
+        supabase.from('market_snapshots').select('spx').order('captured_at', { ascending: false }).limit(1).single(),
       ])
       if (cancelled) return
       if (sd) {
@@ -377,11 +376,7 @@ export default function BackendPage() {
         setPrices(map)
       }
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
-      if (ctx) {
-        const c = ctx as { cdx_hy_spread: number | null; cdx_ig_spread: number | null }
-        latestCdxHyRef.current = c.cdx_hy_spread ?? null
-        latestCdxIgRef.current = c.cdx_ig_spread ?? null
-      }
+      if (ctx) latestSpxRef.current = (ctx as { spx: number | null }).spx ?? null
     }
 
     loadData()
@@ -447,19 +442,8 @@ export default function BackendPage() {
         size:   sz,
         mode,
       }
-      // Try with CDX columns first; if columns don't exist yet, fall back to base row
-      supabase.from('price_changes').insert({
-        ...baseRow,
-        cdx_hy: latestCdxHyRef.current,
-        cdx_ig: latestCdxIgRef.current,
-      }).then(({ error }) => {
-        if (error) {
-          console.warn('[price_changes insert with CDX failed, retrying without]', error.message)
-          supabase.from('price_changes').insert(baseRow).then(({ error: e2 }) => {
-            if (e2) console.warn('[price_changes insert failed]', e2.message)
-          })
-        }
-      })
+      supabase.from('price_changes').insert({ ...baseRow, spx_at_time: latestSpxRef.current })
+        .then(({ error }) => { if (error) console.warn('[price_changes insert failed]', error.message) })
     }
 
     setEditingCell(null)
@@ -538,7 +522,7 @@ export default function BackendPage() {
     if (px == null)            { shake(); showError(isHit ? 'No bid posted on this tranche' : 'No offer posted on this tranche'); return }
     if (dealer === passiveDealer) { shake(); showError(`${dealer} cannot ${isHit ? 'hit' : 'lift'} their own price`); return }
 
-    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz, spx_at_time: latestSpxRef.current })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, isHit ? 'red' : 'green')
   }

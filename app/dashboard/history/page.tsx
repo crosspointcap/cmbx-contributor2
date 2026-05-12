@@ -22,6 +22,7 @@ interface PriceChange {
   price: number | null
   size: number | null
   mode: string | null
+  spx_at_time: number | null
 }
 
 interface TradeRow {
@@ -34,11 +35,7 @@ interface TradeRow {
   trade_size: number | null
   dealer: string | null
   passive_dealer: string | null
-}
-
-interface MarketContext {
-  date: string
-  spx_close: number | null
+  spx_at_time: number | null
 }
 
 function getStartDate(range: QuickRange): string | null {
@@ -89,12 +86,11 @@ const DATE_INPUT_STYLE: React.CSSProperties = {
 
 export default function HistoryPage() {
   const [quickRange,   setQuickRange]   = useState<QuickRange>('1D')
-  const [customFrom,   setCustomFrom]   = useState('')   // YYYY-MM-DD
-  const [customTo,     setCustomTo]     = useState('')   // YYYY-MM-DD
+  const [customFrom,   setCustomFrom]   = useState('')
+  const [customTo,     setCustomTo]     = useState('')
   const [searchText,   setSearchText]   = useState('')
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([])
   const [trades,       setTrades]       = useState<TradeRow[]>([])
-  const [marketCtx,    setMarketCtx]    = useState<MarketContext[]>([])
   const [loading,      setLoading]      = useState(false)
   const [isTrader,     setIsTrader]     = useState(false)
   const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
@@ -113,7 +109,7 @@ export default function HistoryPage() {
     })
   }, [])
 
-  // ── Realtime: new entries stream in live ─────────────────────────────────────
+  // ── Realtime: stream new entries live ────────────────────────────────────────
   useEffect(() => {
     const ch = supabase
       .channel(`history-rt-${Math.random().toString(36).slice(2)}`)
@@ -122,7 +118,8 @@ export default function HistoryPage() {
         setPriceChanges(prev => [{
           id: pc.id, created_at: pc.created_at,
           series_number: pc.series_number, tranche_name: pc.tranche_name,
-          dealer: pc.dealer, side: pc.side, price: pc.price, size: pc.size, mode: pc.mode,
+          dealer: pc.dealer, side: pc.side, price: pc.price, size: pc.size,
+          mode: pc.mode, spx_at_time: pc.spx_at_time ?? null,
         }, ...prev])
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
@@ -132,6 +129,7 @@ export default function HistoryPage() {
           series_number: t.series_number, tranche_name: t.tranche_name,
           side: t.side, price: t.price, trade_size: t.trade_size,
           dealer: t.dealer, passive_dealer: t.passive_dealer,
+          spx_at_time: t.spx_at_time ?? null,
         }, ...prev])
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
@@ -155,37 +153,28 @@ export default function HistoryPage() {
 
     let pcQ = supabase
       .from('price_changes')
-      .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode')
+      .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode, spx_at_time')
       .order('created_at', { ascending: false })
       .limit(2000)
 
     let trQ = supabase
       .from('trades')
-      .select('id, created_at, series_number, tranche_name, side, price, trade_size, dealer, passive_dealer')
+      .select('id, created_at, series_number, tranche_name, side, price, trade_size, dealer, passive_dealer, spx_at_time')
       .order('created_at', { ascending: false })
       .limit(500)
 
-    let ctxQ = supabase
-      .from('market_context')
-      .select('date, spx_close')
-      .order('date', { ascending: true })
-      .limit(400)
-
     if (startDate) {
-      pcQ  = pcQ.gte('created_at', startDate + 'T00:00:00')
-      trQ  = trQ.gte('created_at', startDate + 'T00:00:00')
-      ctxQ = ctxQ.gte('date', startDate)
+      pcQ = pcQ.gte('created_at', startDate + 'T00:00:00')
+      trQ = trQ.gte('created_at', startDate + 'T00:00:00')
     }
     if (endDate) {
-      pcQ  = pcQ.lte('created_at', endDate + 'T23:59:59')
-      trQ  = trQ.lte('created_at', endDate + 'T23:59:59')
-      ctxQ = ctxQ.lte('date', endDate)
+      pcQ = pcQ.lte('created_at', endDate + 'T23:59:59')
+      trQ = trQ.lte('created_at', endDate + 'T23:59:59')
     }
 
-    const [{ data: pd }, { data: td }, { data: cd }] = await Promise.all([pcQ, trQ, ctxQ])
+    const [{ data: pd }, { data: td }] = await Promise.all([pcQ, trQ])
     if (pd) setPriceChanges(pd)
     if (td) setTrades(td)
-    if (cd) setMarketCtx(cd)
     setLoading(false)
   }
 
@@ -212,13 +201,7 @@ export default function HistoryPage() {
     if (!error) setPriceChanges(prev => prev.filter(pc => pc.id !== id))
   }
 
-  const ctxByDate = useMemo(() => {
-    const map: Record<string, MarketContext> = {}
-    for (const c of marketCtx) map[c.date] = c
-    return map
-  }, [marketCtx])
-
-  // ── Client-side search filter (tranche name, series, dealer) ─────────────────
+  // ── Client-side search filter ─────────────────────────────────────────────
   const q = searchText.trim().toLowerCase()
 
   const filteredPriceChanges = useMemo(() => {
@@ -260,7 +243,7 @@ export default function HistoryPage() {
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, background: '#080808', flexWrap: 'wrap' }}>
 
-        {/* Quick range buttons */}
+        {/* Quick range */}
         <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>RANGE</span>
         {QUICK_RANGES.map(r => (
           <button key={r} onClick={() => handleQuickRange(r)} style={{
@@ -278,21 +261,16 @@ export default function HistoryPage() {
         {/* Custom date range */}
         <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>FROM</span>
         <input
-          type="date"
-          value={customFrom}
-          onChange={e => setCustomFrom(e.target.value)}
+          type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
           style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? '#f0c040' : '#2a2a2a'}` }}
         />
         <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>TO</span>
         <input
-          type="date"
-          value={customTo}
-          onChange={e => setCustomTo(e.target.value)}
+          type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
           style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? '#f0c040' : '#2a2a2a'}` }}
         />
         <button
-          onClick={handleCustomGo}
-          disabled={!customFrom || !customTo}
+          onClick={handleCustomGo} disabled={!customFrom || !customTo}
           style={{
             background: customFrom && customTo ? '#1a1500' : 'transparent',
             color:      customFrom && customTo ? '#f0c040' : '#333',
@@ -302,10 +280,9 @@ export default function HistoryPage() {
           }}
         >GO</button>
         {usingCustomRange && (
-          <button
-            onClick={handleClearCustom}
-            style={{ background: 'transparent', color: '#555', border: '1px solid #222', padding: '2px 8px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}
-          >✕ CLEAR</button>
+          <button onClick={handleClearCustom} style={{ background: 'transparent', color: '#555', border: '1px solid #222', padding: '2px 8px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}>
+            ✕ CLEAR
+          </button>
         )}
 
         <span style={{ color: '#2a2a2a', padding: '0 2px' }}>|</span>
@@ -313,17 +290,12 @@ export default function HistoryPage() {
         {/* Search */}
         <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>SEARCH</span>
         <input
-          type="text"
-          placeholder="tranche · dealer · series..."
-          value={searchText}
-          onChange={e => setSearchText(e.target.value)}
+          type="text" placeholder="tranche · dealer · series..."
+          value={searchText} onChange={e => setSearchText(e.target.value)}
           style={{ ...DATE_INPUT_STYLE, border: `1px solid ${q ? '#555' : '#2a2a2a'}`, width: '190px', color: q ? '#ccc' : '#555' }}
         />
         {q && (
-          <button
-            onClick={() => setSearchText('')}
-            style={{ background: 'transparent', color: '#555', border: 'none', cursor: 'pointer', fontSize: '11px', fontFamily: 'Courier New, monospace', padding: '0 2px' }}
-          >✕</button>
+          <button onClick={() => setSearchText('')} style={{ background: 'transparent', color: '#555', border: 'none', cursor: 'pointer', fontSize: '11px', fontFamily: 'Courier New, monospace', padding: '0 2px' }}>✕</button>
         )}
 
         {loading && <span style={{ color: '#3a3a3a', fontSize: '11px', marginLeft: '4px' }}>LOADING...</span>}
@@ -332,7 +304,7 @@ export default function HistoryPage() {
       {/* Tables */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-        {/* Table 1: Price Activity */}
+        {/* Price Activity */}
         <div style={{ flex: '0 0 50%', overflow: 'auto', borderBottom: '1px solid #1a1a1a' }}>
           <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>PRICE ACTIVITY</span>
@@ -361,7 +333,6 @@ export default function HistoryPage() {
                   {q ? `— no results for "${searchText}"` : '— no price activity for selected range'}
                 </td></tr>
               ) : filteredPriceChanges.map((pc, i) => {
-                const ctx           = ctxByDate[pc.created_at.split('T')[0]]
                 const canSeeDealer  = isTrader || pc.dealer === myDealerCode
                 const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
                 const dealerColor   = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
@@ -374,7 +345,9 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
-                    <td style={{ textAlign: 'right',  padding: '3px 12px', color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
+                    <td style={{ textAlign: 'right',  padding: '3px 12px', color: pc.spx_at_time != null ? '#3388ff' : '#2a2a2a' }}>
+                      {pc.spx_at_time != null ? pc.spx_at_time.toLocaleString() : '—'}
+                    </td>
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
                         <button
@@ -392,7 +365,7 @@ export default function HistoryPage() {
           </table>
         </div>
 
-        {/* Table 2: Trade Log */}
+        {/* Trade Log */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>TRADE LOG</span>
@@ -417,21 +390,20 @@ export default function HistoryPage() {
                 <tr><td colSpan={6} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
                 </td></tr>
-              ) : filteredTrades.map((t, i) => {
-                const ctx = ctxByDate[t.created_at.split('T')[0]]
-                return (
-                  <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
-                    <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
-                    <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#f0c040', fontWeight: 700 }}>
-                      {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
-                  </tr>
-                )
-              })}
+              ) : filteredTrades.map((t, i) => (
+                <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
+                  <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
+                  <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
+                  <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
+                  <td style={{ textAlign: 'right', padding: '3px 6px', color: '#f0c040', fontWeight: 700 }}>
+                    {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
+                  <td style={{ textAlign: 'right', padding: '3px 12px', color: t.spx_at_time != null ? '#3388ff' : '#2a2a2a' }}>
+                    {t.spx_at_time != null ? t.spx_at_time.toLocaleString() : '—'}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
