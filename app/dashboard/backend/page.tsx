@@ -255,7 +255,7 @@ export default function BackendPage() {
   const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
-  const [showEmptyRows,   setShowEmptyRows]   = useState(false)
+  const [showEmptyRows,   setShowEmptyRows]   = useState(true)
   const defaultsApplied = useRef(false)
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
@@ -375,7 +375,7 @@ export default function BackendPage() {
       if (sd) {
         setSeries(sd)
         if (!defaultsApplied.current) {
-          setCollapsedSeries(new Set(sd.map((s: SeriesConfig) => s.series_number)))  // all series collapsed on load
+          setCollapsedSeries(new Set())  // admin: all series expanded on load
           defaultsApplied.current = true
         }
       }
