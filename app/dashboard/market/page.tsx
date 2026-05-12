@@ -32,8 +32,8 @@ interface Price {
   tranche_name: string
   bid: number | null
   ask: number | null
-  bid_size: number | null
-  ask_size: number | null
+  bid_size: string | null
+  ask_size: string | null
   bid_dealer: string | null
   ask_dealer: string | null
   last_trade_px: number | null
@@ -398,7 +398,7 @@ export default function MarketPage() {
                           </td>
                           {layout.showSizes && (
                             <td style={{ textAlign: 'right', padding: '6px 8px', color: price?.bid_size != null ? '#888' : '#2a2a2a' }}>
-                              {price?.bid_size != null ? String(price.bid_size) : '—'}
+                              {price?.bid_size ?? '—'}
                             </td>
                           )}
                           <td style={{ textAlign: 'right', padding: '6px 10px', color: bidColor, borderLeft: '2px solid #1a3a1a' }}>
@@ -409,7 +409,7 @@ export default function MarketPage() {
                           </td>
                           {layout.showSizes && (
                             <td style={{ textAlign: 'right', padding: '6px 8px', color: price?.ask_size != null ? '#888' : '#2a2a2a' }}>
-                              {price?.ask_size != null ? String(price.ask_size) : '—'}
+                              {price?.ask_size ?? '—'}
                             </td>
                           )}
                           {layout.showLast && (

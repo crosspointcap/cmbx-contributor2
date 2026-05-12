@@ -136,8 +136,8 @@ interface Price {
   tranche_name: string
   bid: number | null
   ask: number | null
-  bid_size: number | null
-  ask_size: number | null
+  bid_size: string | null
+  ask_size: string | null
   bid_dealer: string | null
   ask_dealer: string | null
   last_trade_px: number | null
@@ -410,10 +410,21 @@ export default function BackendPage() {
     const [seriesNum, trancheName] = key.split(':')
     const dealer = selectedDealerRef.current
     const existing = prices[key]
-
-    // Detect format: 32nds ("80-01" or "$80-01"), dollar price ("$85.50"), or spread (plain number)
-    // Strip leading $ before format detection so "$86-16" is treated as 32nds same as "86-16"
     const trimmed  = value.trim()
+
+    // ── Size fields: stored as text so "10A", "25B" etc. are valid ───────────
+    if (field === 'bid_size' || field === 'ask_size') {
+      await supabase.from('prices').upsert({
+        series_number: seriesNum,
+        tranche_name:  trancheName,
+        [field]: trimmed === '' ? null : trimmed,
+      }, { onConflict: 'series_number,tranche_name' })
+      setEditingCell(null)
+      return
+    }
+
+    // ── Price fields (bid / ask) ──────────────────────────────────────────────
+    // Detect format: 32nds ("80-01" or "$80-01"), dollar price ("$85.50"), or spread (plain number)
     const stripped = trimmed.startsWith('$') ? trimmed.slice(1) : trimmed
     const is32nds  = /^\d+-\d{1,2}$/.test(stripped)
     const isDollar = !is32nds && trimmed.startsWith('$')
@@ -434,17 +445,17 @@ export default function BackendPage() {
     if (field === 'ask' && dealer) update.ask_dealer = dealer
 
     // Auto-fill default size if entering a price and size is currently empty
-    const defSize = DEFAULT_SIZE[trancheName] ?? 5
+    const defSize = String(DEFAULT_SIZE[trancheName] ?? 5)
     if (field === 'bid' && trimmed !== '' && existing?.bid_size == null) update.bid_size = defSize
     if (field === 'ask' && trimmed !== '' && existing?.ask_size == null) update.ask_size = defSize
 
     await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
 
     // Log every bid/ask price entry to the audit table
-    if ((field === 'bid' || field === 'ask') && trimmed !== '' && numericValue != null) {
+    if (trimmed !== '' && numericValue != null) {
       const sz = field === 'bid'
-        ? (update.bid_size as number ?? existing?.bid_size ?? null)
-        : (update.ask_size as number ?? existing?.ask_size ?? null)
+        ? (update.bid_size as string ?? existing?.bid_size ?? null)
+        : (update.ask_size as string ?? existing?.ask_size ?? null)
       const baseRow = {
         series_number: seriesNum,
         tranche_name:  trancheName,
@@ -875,8 +886,8 @@ export default function BackendPage() {
                     </span>
                   )
 
-                  const bszCell = <span style={{ color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.bid_size != null ? String(price.bid_size) : '—'}</span>
-                  const aszCell = <span style={{ color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.ask_size != null ? String(price.ask_size) : '—'}</span>
+                  const bszCell = <span style={{ color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.bid_size ?? '—'}</span>
+                  const aszCell = <span style={{ color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.ask_size ?? '—'}</span>
 
                   return (
                     <tr

@@ -20,7 +20,7 @@ interface PriceChange {
   dealer: string | null
   side: 'bid' | 'ask'
   price: number | null
-  size: number | null
+  size: string | null
   mode: string | null
   spx_at_time: number | null
 }
