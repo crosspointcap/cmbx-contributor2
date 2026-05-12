@@ -214,12 +214,16 @@ export default function HistoryPage() {
   }, [priceChanges, q])
 
   const filteredTrades = useMemo(() => {
-    if (!q) return trades
-    return trades.filter(t =>
+    // Dealers only see trades they were a party to
+    let list = (!isTrader && myDealerCode)
+      ? trades.filter(t => t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
+      : trades
+    if (!q) return list
+    return list.filter(t =>
       `cmbx.${t.series_number}.${t.tranche_name}`.toLowerCase().includes(q) ||
       t.tranche_name.toLowerCase().includes(q)
     )
-  }, [trades, q])
+  }, [trades, q, isTrader, myDealerCode])
 
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -380,6 +384,9 @@ export default function HistoryPage() {
                 <th style={{ textAlign: 'left',  padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
                 <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
                 <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
+                {isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>BUYER</th>}
+                {isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SELLER</th>}
+                {!isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>CPTY</th>}
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
                 <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
@@ -387,23 +394,33 @@ export default function HistoryPage() {
             </thead>
             <tbody>
               {filteredTrades.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 8 : 7} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
                 </td></tr>
-              ) : filteredTrades.map((t, i) => (
-                <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                  <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
-                  <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
-                  <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
-                  <td style={{ textAlign: 'right', padding: '3px 6px', color: '#f0c040', fontWeight: 700 }}>
-                    {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
-                  <td style={{ textAlign: 'right', padding: '3px 12px', color: t.spx_at_time != null ? '#3388ff' : '#2a2a2a' }}>
-                    {t.spx_at_time != null ? t.spx_at_time.toLocaleString() : '—'}
-                  </td>
-                </tr>
-              ))}
+              ) : filteredTrades.map((t, i) => {
+                // For traders: show both buyer and seller
+                // For dealers: show only who they traded against
+                const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
+                const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
+                const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
+                return (
+                  <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
+                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
+                    {isTrader && <td style={{ padding: '3px 6px', color: '#66ff88', fontWeight: 700 }}>{buyer ?? '—'}</td>}
+                    {isTrader && <td style={{ padding: '3px 6px', color: '#ff6666', fontWeight: 700 }}>{seller ?? '—'}</td>}
+                    {!isTrader && <td style={{ padding: '3px 6px', color: DEALER_COLORS[cpty ?? ''] ?? '#666', fontWeight: 700 }}>{cpty ?? '—'}</td>}
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: '#f0c040', fontWeight: 700 }}>
+                      {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: t.spx_at_time != null ? '#3388ff' : '#2a2a2a' }}>
+                      {t.spx_at_time != null ? t.spx_at_time.toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
