@@ -258,7 +258,9 @@ export default function BackendPage() {
   const [confirmClear, setConfirmClear] = useState(false)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
   const [showEmptyRows,   setShowEmptyRows]   = useState(true)
-  const defaultsApplied = useRef(false)
+  const defaultsApplied  = useRef(false)
+  const flashTimers      = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const errorTimer       = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
   const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
@@ -380,13 +382,23 @@ export default function BackendPage() {
     }
 
     loadData()
-    return () => { cancelled = true; supabase.removeChannel(ch) }
+    return () => {
+      cancelled = true
+      supabase.removeChannel(ch)
+      // Clear all pending timers on unmount
+      Object.values(flashTimers.current).forEach(clearTimeout)
+      flashTimers.current = {}
+      if (errorTimer.current) { clearTimeout(errorTimer.current); errorTimer.current = null }
+    }
   }, [authChecked])
 
   function flashRowEffect(key: string, color: 'red' | 'green') {
+    // Clear any existing timer for this row before starting a new one
+    if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
     setFlashRows(prev => ({ ...prev, [key]: color }))
-    setTimeout(() => {
+    flashTimers.current[key] = setTimeout(() => {
       setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
+      delete flashTimers.current[key]
     }, 20000)
   }
 
@@ -499,8 +511,9 @@ export default function BackendPage() {
   }
 
   function showError(msg: string) {
+    if (errorTimer.current) clearTimeout(errorTimer.current)
     setCellError(msg)
-    setTimeout(() => setCellError(''), 3000)
+    errorTimer.current = setTimeout(() => { setCellError(''); errorTimer.current = null }, 3000)
   }
 
   async function executeTrade(side: 'hit' | 'lift') {

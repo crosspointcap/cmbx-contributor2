@@ -156,41 +156,45 @@ export default function HistoryPage() {
 
   async function loadData(startDate: string | null, endDate: string | null) {
     setLoading(true)
+    try {
+      let pcQ = supabase
+        .from('price_changes')
+        .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode, spx_at_time')
+        .order('created_at', { ascending: false })
+        .limit(2000)
 
-    let pcQ = supabase
-      .from('price_changes')
-      .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode, spx_at_time')
-      .order('created_at', { ascending: false })
-      .limit(2000)
+      let trQ = supabase
+        .from('trades')
+        .select('id, created_at, series_number, tranche_name, side, price, trade_size, dealer, passive_dealer, spx_at_time')
+        .order('created_at', { ascending: false })
+        .limit(500)
 
-    let trQ = supabase
-      .from('trades')
-      .select('id, created_at, series_number, tranche_name, side, price, trade_size, dealer, passive_dealer, spx_at_time')
-      .order('created_at', { ascending: false })
-      .limit(500)
+      let ctxQ = supabase
+        .from('market_context')
+        .select('date, spx_close')
+        .order('date', { ascending: true })
+        .limit(400)
 
-    let ctxQ = supabase
-      .from('market_context')
-      .select('date, spx_close')
-      .order('date', { ascending: true })
-      .limit(400)
+      if (startDate) {
+        pcQ  = pcQ.gte('created_at', startDate + 'T00:00:00')
+        trQ  = trQ.gte('created_at', startDate + 'T00:00:00')
+        ctxQ = ctxQ.gte('date', startDate)
+      }
+      if (endDate) {
+        pcQ  = pcQ.lte('created_at', endDate + 'T23:59:59')
+        trQ  = trQ.lte('created_at', endDate + 'T23:59:59')
+        ctxQ = ctxQ.lte('date', endDate)
+      }
 
-    if (startDate) {
-      pcQ  = pcQ.gte('created_at', startDate + 'T00:00:00')
-      trQ  = trQ.gte('created_at', startDate + 'T00:00:00')
-      ctxQ = ctxQ.gte('date', startDate)
+      const [{ data: pd }, { data: td }, { data: cd }] = await Promise.all([pcQ, trQ, ctxQ])
+      if (pd) setPriceChanges(pd)
+      if (td) setTrades(td)
+      if (cd) setDailyCloses(cd)
+    } catch (err) {
+      console.error('[history] loadData failed:', err)
+    } finally {
+      setLoading(false)
     }
-    if (endDate) {
-      pcQ  = pcQ.lte('created_at', endDate + 'T23:59:59')
-      trQ  = trQ.lte('created_at', endDate + 'T23:59:59')
-      ctxQ = ctxQ.lte('date', endDate)
-    }
-
-    const [{ data: pd }, { data: td }, { data: cd }] = await Promise.all([pcQ, trQ, ctxQ])
-    if (pd) setPriceChanges(pd)
-    if (td) setTrades(td)
-    if (cd) setDailyCloses(cd)
-    setLoading(false)
   }
 
   function handleQuickRange(r: QuickRange) {

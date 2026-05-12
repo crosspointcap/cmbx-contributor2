@@ -231,35 +231,39 @@ export default function MarketPage() {
       .subscribe()
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }, { data: tr }] = await Promise.all([
-        supabase.from('series_config').select('series_number, sort_order').eq('active', true).order('sort_order'),
-        supabase.from('tranche_config').select('tranche_name, sort_order').eq('active', true).order('sort_order'),
-        supabase.from('prices').select('*'),
-        supabase.from('trades').select('id, side, series_number, tranche_name, price, created_at, dealer, passive_dealer').order('created_at', { ascending: false }).limit(100),
-      ])
-      if (cancelled) return
-      if (sd) {
-        setSeries(sd)
-        if (!defaultsApplied.current) {
-          const liveSeriesNums = new Set(
-            (pd ?? [])
-              .filter((p: any) => p.bid != null || p.ask != null || p.last_trade_px != null)
-              .map((p: any) => p.series_number)
-          )
-          setCollapsedSeries(new Set(
-            sd.map((s: SeriesConfig) => s.series_number)
-               .filter((sn: string) => !liveSeriesNums.has(sn))
-          ))
-          defaultsApplied.current = true
+      try {
+        const [{ data: sd }, { data: td }, { data: pd }, { data: tr }] = await Promise.all([
+          supabase.from('series_config').select('series_number, sort_order').eq('active', true).order('sort_order'),
+          supabase.from('tranche_config').select('tranche_name, sort_order').eq('active', true).order('sort_order'),
+          supabase.from('prices').select('*'),
+          supabase.from('trades').select('id, side, series_number, tranche_name, price, created_at, dealer, passive_dealer').order('created_at', { ascending: false }).limit(100),
+        ])
+        if (cancelled) return
+        if (sd) {
+          setSeries(sd)
+          if (!defaultsApplied.current) {
+            const liveSeriesNums = new Set(
+              (pd ?? [])
+                .filter((p: any) => p.bid != null || p.ask != null || p.last_trade_px != null)
+                .map((p: any) => p.series_number)
+            )
+            setCollapsedSeries(new Set(
+              sd.map((s: SeriesConfig) => s.series_number)
+                 .filter((sn: string) => !liveSeriesNums.has(sn))
+            ))
+            defaultsApplied.current = true
+          }
         }
+        if (td) setTranches(td)
+        if (pd) {
+          const map: Record<string, Price> = {}
+          for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
+          setPrices(map)
+        }
+        if (tr) setBlotter(tr.map(mapTrade))
+      } catch (err) {
+        console.error('[market] loadData failed:', err)
       }
-      if (td) setTranches(td)
-      if (pd) {
-        const map: Record<string, Price> = {}
-        for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
-        setPrices(map)
-      }
-      if (tr) setBlotter(tr.map(mapTrade))
     }
 
     loadData()
