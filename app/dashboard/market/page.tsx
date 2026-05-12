@@ -41,6 +41,7 @@ interface Price {
   ask_dealer: string | null
   last_trade_px: number | null
   last_trade_time: string | null
+  mode: string | null
 }
 
 interface SeriesConfig {
@@ -62,6 +63,19 @@ interface BlotterEntry {
   price: number | null
   dealer: string | null
   passive_dealer: string | null
+}
+
+function fmt32nds(n: number): string {
+  const whole = Math.floor(n)
+  const ticks = Math.round((n - whole) * 32)
+  return `${whole}-${ticks.toString().padStart(2, '0')}`
+}
+
+function formatPx(price: number | null | undefined, mode: string | null | undefined): string {
+  if (price == null) return '—'
+  if (mode === 'ticks') return fmt32nds(price)
+  if (mode === 'price') return `$${price}`
+  return String(price)
 }
 
 function fmtTime(ts: string) {
@@ -310,11 +324,11 @@ export default function MarketPage() {
                         </td>
                         {/* BID */}
                         <td style={{ textAlign: 'right', padding: '6px 10px', color: bidColor, borderLeft: '2px solid #1a3a1a' }}>
-                          {price?.bid != null ? String(price.bid) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          {formatPx(price?.bid, price?.mode)}
                         </td>
                         {/* ASK */}
                         <td style={{ textAlign: 'right', padding: '6px 10px', color: askColor, borderLeft: '2px solid #3a1a1a' }}>
-                          {price?.ask != null ? String(price.ask) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          {formatPx(price?.ask, price?.mode)}
                         </td>
                         {/* ASK SIZE */}
                         <td style={{ textAlign: 'right', padding: '6px 8px', color: price?.ask_size != null ? '#888' : '#2a2a2a' }}>
@@ -324,7 +338,7 @@ export default function MarketPage() {
                         <td style={{ textAlign: 'right', padding: '6px 12px 6px 8px' }}>
                           {price?.last_trade_px != null ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
-                              <span style={{ color: '#888' }}>{String(price.last_trade_px)}</span>
+                              <span style={{ color: '#888' }}>{formatPx(price.last_trade_px, price.mode)}</span>
                               {price.last_trade_time && (
                                 <span style={{ color: '#444', fontSize: '10px' }}>{fmtTime(price.last_trade_time)}</span>
                               )}

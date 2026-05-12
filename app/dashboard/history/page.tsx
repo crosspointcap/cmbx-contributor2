@@ -41,7 +41,6 @@ interface TradeRow {
 interface MarketContext {
   date: string
   spx_close: number | null
-  vix_close: number | null
   cdx_hy_spread: number | null
   cdx_ig_spread: number | null
 }
@@ -167,7 +166,7 @@ export default function HistoryPage() {
 
     let ctxQ = supabase
       .from('market_context')
-      .select('date, spx_close, vix_close, cdx_hy_spread, cdx_ig_spread')
+      .select('date, spx_close, cdx_hy_spread, cdx_ig_spread')
       .order('date', { ascending: true })
       .limit(400)
 

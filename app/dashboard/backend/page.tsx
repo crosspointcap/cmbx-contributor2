@@ -156,16 +156,6 @@ interface TrancheConfig {
   sort_order: number
 }
 
-interface TradeLog {
-  time: string
-  action: 'HIT' | 'LIFT'
-  series: string
-  tranche: string
-  dealer: string
-  passive_dealer: string | null
-  price: number | null
-}
-
 interface BlotterTrade {
   id: string
   time: string
@@ -225,6 +215,15 @@ async function handleSignOut() {
   window.location.href = '/login'
 }
 
+function dealerButtonStyle(code: string, isSelected: boolean): React.CSSProperties {
+  if (isSelected) {
+    const s = DEALER_SELECTED[code]
+    return { background: s?.bg, color: s?.color ?? '#fff', border: '1px solid #fff', outline: `2px solid ${s?.outline}`, padding: '4px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace', fontWeight: 500, borderRadius: '2px', cursor: 'pointer' }
+  }
+  const d = DEALER_INACTIVE[code]
+  return { background: d?.bg, color: d?.color, border: `1px solid ${d?.border}`, padding: '4px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace', fontWeight: 500, borderRadius: '2px', cursor: 'pointer' }
+}
+
 function mapTrade(t: any): BlotterTrade {
   return {
     id:             t.id,
@@ -254,7 +253,7 @@ export default function BackendPage() {
   const [hitShake, setHitShake] = useState(false)
   const [liftShake, setLiftShake] = useState(false)
   const [cellError, setCellError] = useState('')
-  const [tradeLog, setTradeLog] = useState<TradeLog | null>(null)
+  const [tradeLog, setTradeLog] = useState<BlotterTrade | null>(null)
   const [hoveredCell, setHoveredCell] = useState<{ key: string; field: EditField } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
@@ -344,7 +343,7 @@ export default function BackendPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const entry = mapTrade(payload.new)
         flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green')
-        setTradeLog({ time: entry.time, action: entry.action, series: entry.series, tranche: entry.tranche, dealer: entry.dealer, passive_dealer: entry.passive_dealer, price: entry.price })
+        setTradeLog(entry)
         setBlotterTrades(prev => [entry, ...prev])
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_heartbeat' }, (payload) => {
@@ -379,8 +378,9 @@ export default function BackendPage() {
       }
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
       if (ctx) {
-        latestCdxHyRef.current = (ctx as any).cdx_hy_spread ?? null
-        latestCdxIgRef.current = (ctx as any).cdx_ig_spread ?? null
+        const c = ctx as { cdx_hy_spread: number | null; cdx_ig_spread: number | null }
+        latestCdxHyRef.current = c.cdx_hy_spread ?? null
+        latestCdxIgRef.current = c.cdx_ig_spread ?? null
       }
     }
 
@@ -568,12 +568,11 @@ export default function BackendPage() {
           }
           setEditingCell({ key, field })
           // Pre-populate in the correct display format
-          const px = prices[key]
-          const pxMode = px?.mode
           if (rawVal != null && (field === 'bid' || field === 'ask')) {
-            if (pxMode === 'ticks')  setEditValue(fmt32nds(rawVal))
-            else if (pxMode === 'price') setEditValue(`$${rawVal}`)
-            else setEditValue(String(rawVal))
+            const mode = price?.mode
+            if (mode === 'ticks')       setEditValue(fmt32nds(rawVal))
+            else if (mode === 'price')  setEditValue(`$${rawVal}`)
+            else                        setEditValue(String(rawVal))
           } else {
             setEditValue(rawVal != null ? String(rawVal) : '')
           }
@@ -689,28 +688,7 @@ export default function BackendPage() {
           <button
             key={code}
             onClick={() => handleDealerClick(code)}
-            style={selectedDealer === code ? {
-              background: DEALER_SELECTED[code]?.bg,
-              color: DEALER_SELECTED[code]?.color ?? '#fff',
-              border: '1px solid #fff',
-              outline: `2px solid ${DEALER_SELECTED[code]?.outline}`,
-              padding: '4px 14px',
-              fontSize: '15px',
-              fontFamily: 'Courier New, monospace',
-              fontWeight: 500,
-              borderRadius: '2px',
-              cursor: 'pointer',
-            } : {
-              background: DEALER_INACTIVE[code]?.bg,
-              color: DEALER_INACTIVE[code]?.color,
-              border: `1px solid ${DEALER_INACTIVE[code]?.border}`,
-              padding: '4px 14px',
-              fontSize: '15px',
-              fontFamily: 'Courier New, monospace',
-              fontWeight: 500,
-              borderRadius: '2px',
-              cursor: 'pointer',
-            }}
+            style={dealerButtonStyle(code, selectedDealer === code)}
           >
             {code}
           </button>
