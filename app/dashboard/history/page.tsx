@@ -3,19 +3,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js'
-import { Line } from 'react-chartjs-2'
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -99,35 +86,9 @@ const DEALER_COLORS: Record<string, string> = {
   GS: '#ffcc44', UBS: '#ff88cc', BNP: '#8888ff', DB: '#88ccff', BARC: '#ffaa66',
 }
 
-const baseChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  animation: { duration: 150 },
-  plugins: {
-    legend: {
-      position: 'top' as const,
-      labels: { color: '#555', font: { family: 'Courier New, monospace', size: 10 }, boxWidth: 10, padding: 8 },
-    },
-    tooltip: {
-      backgroundColor: '#111', titleColor: '#f0c040', bodyColor: '#ccc',
-      borderColor: '#333', borderWidth: 1,
-    },
-  },
-  scales: {
-    x: {
-      ticks: { color: '#444', font: { family: 'Courier New, monospace', size: 9 }, maxTicksLimit: 10, maxRotation: 0 },
-      grid: { color: '#111' },
-    },
-    y: {
-      ticks: { color: '#444', font: { family: 'Courier New, monospace', size: 9 } },
-      grid: { color: '#111' },
-    },
-  },
-}
 
 export default function HistoryPage() {
   const [dateRange,        setDateRange]        = useState<DateRange>('1D')
-  const [selectedChartKey, setSelectedChartKey] = useState<string | null>(null)
   const [priceChanges,     setPriceChanges]     = useState<PriceChange[]>([])
   const [trades,           setTrades]           = useState<TradeRow[]>([])
   const [marketCtx,        setMarketCtx]        = useState<MarketContext[]>([])
@@ -237,118 +198,6 @@ export default function HistoryPage() {
     return map
   }, [marketCtx])
 
-  // ── Selected chart tranche ────────────────────────────────────────────────────
-  const [chartSeries, chartTranche] = selectedChartKey ? selectedChartKey.split(':') : ['—', '—']
-
-  const chartPriceChanges = useMemo(() =>
-    [...priceChanges]
-      .filter(pc => `${pc.series_number}:${pc.tranche_name}` === selectedChartKey)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [priceChanges, selectedChartKey]
-  )
-
-  const chartTrades = useMemo(() =>
-    [...trades]
-      .filter(t => `${t.series_number}:${t.tranche_name}` === selectedChartKey)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [trades, selectedChartKey]
-  )
-
-  // ── CMBX chart: all bid/ask entries + trades for selected tranche ─────────────
-  const cmbxChartData = useMemo(() => {
-    type Evt = { ts: string; bid: number | null; ask: number | null; trade: number | null }
-    const events: Evt[] = [
-      ...chartPriceChanges.map(pc => ({
-        ts: pc.created_at,
-        bid:   pc.side === 'bid' ? pc.price : null,
-        ask:   pc.side === 'ask' ? pc.price : null,
-        trade: null,
-      })),
-      ...chartTrades.map(t => ({ ts: t.created_at, bid: null, ask: null, trade: t.price })),
-    ].sort((a, b) => a.ts.localeCompare(b.ts))
-
-    const labels = events.map(e => fmtTime(e.ts))
-    return {
-      labels,
-      datasets: [
-        {
-          label: 'BID',
-          data: events.map(e => e.bid),
-          borderColor: '#66ff88', backgroundColor: '#66ff88',
-          showLine: false, pointRadius: 5, pointHoverRadius: 7,
-        },
-        {
-          label: 'OFFER',
-          data: events.map(e => e.ask),
-          borderColor: '#ff6666', backgroundColor: '#ff6666',
-          showLine: false, pointRadius: 5, pointHoverRadius: 7,
-        },
-        {
-          label: 'TRADE',
-          data: events.map(e => e.trade),
-          borderColor: '#f0c040', backgroundColor: '#f0c040',
-          showLine: false, pointRadius: 7, pointHoverRadius: 9,
-          pointStyle: 'triangle',
-        },
-      ],
-    }
-  }, [chartPriceChanges, chartTrades])
-
-  const cmbxChartOptions = useMemo(() => ({
-    ...baseChartOptions,
-    plugins: {
-      ...baseChartOptions.plugins,
-      tooltip: {
-        ...baseChartOptions.plugins.tooltip,
-        callbacks: {
-          title: (items: any[]) => `CMBX.${chartSeries}.${chartTranche}  ·  ${items[0]?.label ?? ''}`,
-          label: (item: any) => item.raw == null ? null : `  ${item.dataset.label}:  ${item.raw}`,
-        },
-      },
-    },
-  }), [chartSeries, chartTranche])
-
-  // ── SPX chart ─────────────────────────────────────────────────────────────────
-  const spxChartData = useMemo(() => ({
-    labels: marketCtx.map(m => fmtDate(m.date + 'T12:00:00')),
-    datasets: [{
-      label: 'SPX',
-      data: marketCtx.map(m => m.spx_close),
-      borderColor: '#3388ff', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 2, tension: 0.1,
-    }],
-  }), [marketCtx])
-
-  // ── CDX HY + CDX IG chart ────────────────────────────────────────────────────
-  const cdxChartData = useMemo(() => ({
-    labels: marketCtx.map(m => fmtDate(m.date + 'T12:00:00')),
-    datasets: [
-      {
-        label: 'CDX HY',
-        data: marketCtx.map(m => m.cdx_hy_spread),
-        borderColor: '#eebb00', backgroundColor: 'transparent',
-        borderWidth: 1.5, pointRadius: 2, tension: 0.1, yAxisID: 'y',
-      },
-      {
-        label: 'CDX IG',
-        data: marketCtx.map(m => m.cdx_ig_spread),
-        borderColor: '#44ddaa', backgroundColor: 'transparent',
-        borderWidth: 1.5, pointRadius: 2, tension: 0.1, yAxisID: 'y1',
-      },
-    ],
-  }), [marketCtx])
-
-  const cdxChartOptions = useMemo(() => ({
-    ...baseChartOptions,
-    scales: {
-      ...baseChartOptions.scales,
-      y:  { ...baseChartOptions.scales.y, position: 'left'  as const },
-      y1: { ...baseChartOptions.scales.y, position: 'right' as const, grid: { drawOnChartArea: false } },
-    },
-  }), [])
-
-  const noMarketData = marketCtx.length === 0
-
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -381,24 +230,13 @@ export default function HistoryPage() {
           }}>{r}</button>
         ))}
         {loading && <span style={{ color: '#3a3a3a', fontSize: '11px', marginLeft: '8px' }}>LOADING...</span>}
-        {noMarketData && (
-          <span style={{ color: '#554400', fontSize: '11px', marginLeft: '12px' }}>
-            ⚠ no CDX/SPX data — run bloomberg_agent/market_data_puller.py (CDX) or trigger GitHub Actions (SPX)
-          </span>
-        )}
-        {selectedChartKey && (
-          <span style={{ marginLeft: 'auto', color: '#3a3a3a', fontSize: '11px' }}>
-            chart: <span style={{ color: '#f0c040' }}>CMBX.{chartSeries}.{chartTranche}</span>
-            <span style={{ color: '#2a2a2a' }}> — click a row to change</span>
-          </span>
-        )}
       </div>
 
       {/* Main content */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* ── LEFT 60%: tables ──────────────────────────────────────────────── */}
-        <div style={{ width: '60%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #1a1a1a', overflow: 'hidden' }}>
+        {/* ── Tables ────────────────────────────────────────────────────────── */}
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Table 1: Price Activity */}
           <div style={{ flex: '0 0 50%', overflow: 'auto', borderBottom: '1px solid #1a1a1a' }}>
@@ -431,8 +269,6 @@ export default function HistoryPage() {
                 {priceChanges.length === 0 ? (
                   <tr><td colSpan={isTrader ? 11 : 10} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no price activity for selected range</td></tr>
                 ) : priceChanges.map((pc, i) => {
-                  const key = `${pc.series_number}:${pc.tranche_name}`
-                  const isSelected = key === selectedChartKey
                   const ctx = ctxByDate[pc.created_at.split('T')[0]]
                   // Use CDX stamped directly on the row (exact moment); fall back to daily ctx for older rows
                   const pcCdxHy = pc.cdx_hy ?? ctx?.cdx_hy_spread ?? null
@@ -442,16 +278,14 @@ export default function HistoryPage() {
                   const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
                   const dealerColor = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
                   return (
-                    <tr key={pc.id} onClick={() => setSelectedChartKey(key)} style={{
-                      background: isSelected ? '#111100' : i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
+                    <tr key={pc.id} style={{
+                      background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
                       borderBottom: '1px solid #141414',
-                      borderLeft: isSelected ? '2px solid #f0c040' : '2px solid transparent',
-                      cursor: 'pointer',
                     }}>
                       <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(pc.created_at)}</td>
                       <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(pc.created_at)}</td>
                       <td style={{ padding: '3px 6px',  color: dealerColor, fontWeight: 700 }}>{visibleDealer}</td>
-                      <td style={{ padding: '3px 6px',  color: isSelected ? '#f0c040' : '#aaa' }}>CMBX.{pc.series_number}.{pc.tranche_name}</td>
+                      <td style={{ padding: '3px 6px',  color: '#aaa' }}>CMBX.{pc.series_number}.{pc.tranche_name}</td>
                       <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                       <td style={{ textAlign: 'right', padding: '3px 6px', color: '#fff' }}>
                         {formatPx(pc.price, pc.mode)}
@@ -500,19 +334,15 @@ export default function HistoryPage() {
                 {trades.length === 0 ? (
                   <tr><td colSpan={8} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no trades for selected range</td></tr>
                 ) : trades.map((t, i) => {
-                  const key = `${t.series_number}:${t.tranche_name}`
-                  const isSelected = key === selectedChartKey
                   const ctx = ctxByDate[t.created_at.split('T')[0]]
                   return (
-                    <tr key={t.id} onClick={() => setSelectedChartKey(key)} style={{
-                      background: isSelected ? '#111100' : i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
+                    <tr key={t.id} style={{
+                      background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d',
                       borderBottom: '1px solid #141414',
-                      borderLeft: isSelected ? '2px solid #f0c040' : '2px solid transparent',
-                      cursor: 'pointer',
                     }}>
                       <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
                       <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
-                      <td style={{ padding: '3px 6px',  color: isSelected ? '#f0c040' : '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
+                      <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#f0c040', fontWeight: 700 }}>
                         {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
                       </td>
@@ -528,47 +358,6 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* ── RIGHT 40%: charts ─────────────────────────────────────────────── */}
-        <div style={{ width: '40%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-          {/* Chart 1: CMBX intraday bid/offer + trades */}
-          <div style={{ flex: 1, borderBottom: '1px solid #1a1a1a', padding: '8px 12px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <div style={{ flexShrink: 0, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#66ff88', fontSize: '10px' }}>● BID</span>
-              <span style={{ color: '#ff6666', fontSize: '10px' }}>● OFFER</span>
-              <span style={{ color: '#f0c040', fontSize: '10px' }}>▲ TRADE</span>
-              {selectedChartKey && <span style={{ color: '#f0c040', fontSize: '10px', marginLeft: '4px' }}>CMBX.{chartSeries}.{chartTranche}</span>}
-              {!selectedChartKey && <span style={{ color: '#2a2a2a', fontSize: '10px' }}>click a row to view tranche</span>}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              <Line data={cmbxChartData} options={cmbxChartOptions} />
-            </div>
-          </div>
-
-          {/* Chart 2: SPX */}
-          <div style={{ flex: 1, borderBottom: '1px solid #1a1a1a', padding: '8px 12px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <div style={{ flexShrink: 0, marginBottom: '4px' }}>
-              <span style={{ color: '#3388ff', fontSize: '10px', letterSpacing: '1px' }}>S&P 500</span>
-              {noMarketData && <span style={{ color: '#333', fontSize: '10px', marginLeft: '8px' }}>no data</span>}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              <Line data={spxChartData} options={baseChartOptions} />
-            </div>
-          </div>
-
-          {/* Chart 3: CDX HY + CDX IG */}
-          <div style={{ flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <div style={{ flexShrink: 0, marginBottom: '4px' }}>
-              <span style={{ color: '#eebb00', fontSize: '10px', letterSpacing: '1px' }}>CDX HY</span>
-              <span style={{ color: '#2a2a2a', fontSize: '10px' }}> / </span>
-              <span style={{ color: '#44ddaa', fontSize: '10px', letterSpacing: '1px' }}>CDX IG</span>
-              {noMarketData && <span style={{ color: '#333', fontSize: '10px', marginLeft: '8px' }}>no data — run market_data_puller.py</span>}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              <Line data={cdxChartData} options={cdxChartOptions} />
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )
