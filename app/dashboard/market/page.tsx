@@ -11,7 +11,7 @@ const supabase = createClient(
 
 // Each dealer's brand color — shown for their OWN prices only
 const DEALER_COLOR: Record<string, string> = {
-  MS:   '#ff5555',
+  MS:   '#88ccff',  // light blue — MS requested
   BOA:  '#44dd44',
   CITI: '#bb55ee',
   JPM:  '#3388ff',
@@ -288,8 +288,9 @@ export default function MarketPage() {
 
   function priceColor(val: number | null, dealer: string | null) {
     if (val == null) return '#2a2a2a'
-    if (myCode && dealer === myCode) return myColor
-    return '#ffffff'
+    if (myCode && dealer === myCode) return myColor   // own price → brand color (MS = light blue)
+    if (myCode) return '#ff6666'                      // competitor price → red
+    return '#ffffff'                                  // trader view → white
   }
 
   // Number of visible columns (used for series header colSpan)
