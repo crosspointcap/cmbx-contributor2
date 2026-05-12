@@ -165,6 +165,15 @@ export default function MarketPage() {
         } else {
           const p = payload.new as Price
           setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
+          // Auto-expand the series when a live price arrives
+          if (p.bid != null || p.ask != null || p.last_trade_px != null) {
+            setCollapsedSeries(prev => {
+              if (!prev.has(p.series_number)) return prev  // already expanded — no-op
+              const next = new Set(prev)
+              next.delete(p.series_number)
+              return next
+            })
+          }
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
@@ -190,7 +199,17 @@ export default function MarketPage() {
       if (sd) {
         setSeries(sd)
         if (!defaultsApplied.current) {
-          setCollapsedSeries(new Set(sd.map((s: SeriesConfig) => s.series_number)))
+          // Collapse only series that have no live prices — expand everything else
+          const liveSeriesNums = new Set(
+            (pd ?? [])
+              .filter((p: any) => p.bid != null || p.ask != null || p.last_trade_px != null)
+              .map((p: any) => p.series_number)
+          )
+          setCollapsedSeries(new Set(
+            sd
+              .map((s: SeriesConfig) => s.series_number)
+              .filter((sn: string) => !liveSeriesNums.has(sn))
+          ))
           defaultsApplied.current = true
         }
       }
