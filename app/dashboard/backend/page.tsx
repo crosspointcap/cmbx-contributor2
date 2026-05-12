@@ -129,10 +129,6 @@ const DEALER_SELECTED: Record<string, { bg: string; outline: string; color: stri
   BARC: { bg: '#dd7722', outline: '#dd7722', color: '#fff' },
 }
 
-const DEALER_TAG: Record<string, { color: string; bg: string }> = Object.fromEntries(
-  Object.entries(DEALER_INACTIVE).map(([k, v]) => [k, { color: v.color, bg: v.bg }])
-)
-
 type EditField = 'bid' | 'ask' | 'bid_size' | 'ask_size'
 
 interface Price {
@@ -189,13 +185,6 @@ function fmtTime(ts: string) {
   }).format(new Date(ts))
 }
 
-function nowET() {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(new Date())
-}
-
 // 32nds: "80-01" → 80.03125,  "80-16" → 80.5,  "80-31" → 80.96875
 function parse32nds(val: string): number | null {
   const m = val.trim().match(/^(\d+)-(\d{1,2})$/)
@@ -234,6 +223,20 @@ const inputStyle: React.CSSProperties = {
 async function handleSignOut() {
   await supabase.auth.signOut()
   window.location.href = '/login'
+}
+
+function mapTrade(t: any): BlotterTrade {
+  return {
+    id:             t.id,
+    time:           fmtTime(t.created_at),
+    action:         t.side === 'hit' ? 'HIT' : 'LIFT',
+    series:         t.series_number,
+    tranche:        t.tranche_name,
+    dealer:         t.dealer        ?? null,
+    passive_dealer: t.passive_dealer ?? null,
+    trade_size:     t.trade_size    ?? null,
+    price:          t.price,
+  }
 }
 
 export default function BackendPage() {
@@ -304,7 +307,7 @@ export default function BackendPage() {
   }, [])
 
   useEffect(() => {
-    const tick = () => setClock(nowET())
+    const tick = () => setClock(fmtTime(new Date().toISOString()))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
@@ -339,20 +342,8 @@ export default function BackendPage() {
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
-        const t = payload.new as { id: string; series_number: string; tranche_name: string; side: string; price: number | null; dealer: string; created_at: string }
-        const key = `${t.series_number}:${t.tranche_name}`
-        flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
-        const entry: BlotterTrade = {
-          id: t.id,
-          time: fmtTime(t.created_at),
-          action: t.side === 'hit' ? 'HIT' : 'LIFT',
-          series: t.series_number,
-          tranche: t.tranche_name,
-          dealer: t.dealer,
-          passive_dealer: t.passive_dealer ?? null,
-          trade_size: t.trade_size ?? null,
-          price: t.price,
-        }
+        const entry = mapTrade(payload.new)
+        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green')
         setTradeLog({ time: entry.time, action: entry.action, series: entry.series, tranche: entry.tranche, dealer: entry.dealer, passive_dealer: entry.passive_dealer, price: entry.price })
         setBlotterTrades(prev => [entry, ...prev])
       })
@@ -380,25 +371,13 @@ export default function BackendPage() {
         }
       }
       if (td) setTranches(td)
-      if (tr) {
-        setBlotterTrades(tr.map((t: any) => ({
-          id: t.id,
-          time: fmtTime(t.created_at),
-          action: t.side === 'hit' ? 'HIT' : 'LIFT',
-          series: t.series_number,
-          tranche: t.tranche_name,
-          dealer: t.dealer,
-          passive_dealer: t.passive_dealer ?? null,
-          trade_size: t.trade_size ?? null,
-          price: t.price,
-        })))
-      }
+      if (tr) setBlotterTrades(tr.map(mapTrade))
       if (pd) {
         const map: Record<string, Price> = {}
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
         setPrices(map)
       }
-      if (hb) setAgentOnline((hb as { bbg_connected?: boolean; active?: boolean }).bbg_connected ?? (hb as { bbg_connected?: boolean; active?: boolean }).active ?? false)
+      if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
       if (ctx) {
         latestCdxHyRef.current = (ctx as any).cdx_hy_spread ?? null
         latestCdxIgRef.current = (ctx as any).cdx_ig_spread ?? null
@@ -433,12 +412,10 @@ export default function BackendPage() {
     const isDollar = !is32nds && trimmed.startsWith('$')
     const mode     = is32nds ? 'ticks' : isDollar ? 'price' : 'spread'
 
-    let numericValue: number | null = null
-    if (stripped !== '') {
-      if (is32nds)       numericValue = parse32nds(stripped)
-      else if (isDollar) numericValue = parseFloat(stripped) || null
-      else               numericValue = parseFloat(stripped) || null
-    }
+    const numericValue: number | null =
+      stripped === '' ? null :
+      is32nds         ? parse32nds(stripped) :
+                        (parseFloat(stripped) || null)
 
     const update: Record<string, unknown> = {
       series_number: seriesNum,
@@ -542,36 +519,28 @@ export default function BackendPage() {
     setTimeout(() => setCellError(''), 3000)
   }
 
-  async function executeHit() {
-    const dealer = selectedDealerRef.current
-    const rowKey = selectedRowRef.current
-    if (!dealer) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('Select a counterparty first'); return }
-    if (!rowKey) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('Select a row first'); return }
-    const [seriesNum, trancheName] = rowKey.split(':')
-    const px = prices[rowKey]?.bid ?? null
-    const passiveDealer = prices[rowKey]?.bid_dealer ?? null
-    const sz = prices[rowKey]?.bid_size ?? null
-    if (px == null) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError('No bid posted on this tranche'); return }
-    if (dealer === passiveDealer) { setHitShake(true); setTimeout(() => setHitShake(false), 500); showError(`${dealer} cannot hit their own price`); return }
-    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'hit', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
-    await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
-    flashRowEffect(rowKey, 'red')
-  }
+  async function executeTrade(side: 'hit' | 'lift') {
+    const isHit      = side === 'hit'
+    const setShake   = isHit ? setHitShake : setLiftShake
+    const dealer     = selectedDealerRef.current
+    const rowKey     = selectedRowRef.current
 
-  async function executeLift() {
-    const dealer = selectedDealerRef.current
-    const rowKey = selectedRowRef.current
-    if (!dealer) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('Select a counterparty first'); return }
-    if (!rowKey) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('Select a row first'); return }
+    function shake() { setShake(true); setTimeout(() => setShake(false), 500) }
+
+    if (!dealer) { shake(); showError('Select a counterparty first'); return }
+    if (!rowKey) { shake(); showError('Select a row first'); return }
+
     const [seriesNum, trancheName] = rowKey.split(':')
-    const px = prices[rowKey]?.ask ?? null
-    const passiveDealer = prices[rowKey]?.ask_dealer ?? null
-    const sz = prices[rowKey]?.ask_size ?? null
-    if (px == null) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError('No offer posted on this tranche'); return }
-    if (dealer === passiveDealer) { setLiftShake(true); setTimeout(() => setLiftShake(false), 500); showError(`${dealer} cannot lift their own price`); return }
-    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side: 'lift', price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
+    const px            = isHit ? (prices[rowKey]?.bid ?? null)         : (prices[rowKey]?.ask ?? null)
+    const passiveDealer = isHit ? (prices[rowKey]?.bid_dealer ?? null)  : (prices[rowKey]?.ask_dealer ?? null)
+    const sz            = isHit ? (prices[rowKey]?.bid_size ?? null)    : (prices[rowKey]?.ask_size ?? null)
+
+    if (px == null)            { shake(); showError(isHit ? 'No bid posted on this tranche' : 'No offer posted on this tranche'); return }
+    if (dealer === passiveDealer) { shake(); showError(`${dealer} cannot ${isHit ? 'hit' : 'lift'} their own price`); return }
+
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
-    flashRowEffect(rowKey, 'green')
+    flashRowEffect(rowKey, isHit ? 'red' : 'green')
   }
 
   function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties) {
@@ -757,7 +726,7 @@ export default function BackendPage() {
       {/* Action row */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', gap: '6px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
         <button
-          onClick={executeHit}
+          onClick={() => executeTrade('hit')}
           style={{
             background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333',
             padding: '3px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace',
@@ -768,7 +737,7 @@ export default function BackendPage() {
           HIT
         </button>
         <button
-          onClick={executeLift}
+          onClick={() => executeTrade('lift')}
           style={{
             background: '#003a00', color: '#66ff88', border: '1px solid #338833',
             padding: '3px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace',
@@ -902,8 +871,8 @@ export default function BackendPage() {
                   if (flash === 'red') rowBg = '#3a0000'
                   if (flash === 'green') rowBg = '#003a00'
 
-                  const bidTag = price?.bid_dealer && DEALER_TAG[price.bid_dealer] ? DEALER_TAG[price.bid_dealer] : null
-                  const askTag = price?.ask_dealer && DEALER_TAG[price.ask_dealer] ? DEALER_TAG[price.ask_dealer] : null
+                  const bidTag = price?.bid_dealer && DEALER_INACTIVE[price.bid_dealer] ? DEALER_INACTIVE[price.bid_dealer] : null
+                  const askTag = price?.ask_dealer && DEALER_INACTIVE[price.ask_dealer] ? DEALER_INACTIVE[price.ask_dealer] : null
 
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>

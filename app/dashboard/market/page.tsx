@@ -71,6 +71,19 @@ function fmtTime(ts: string) {
   }).format(new Date(ts))
 }
 
+function mapTrade(t: any): BlotterEntry {
+  return {
+    id:             t.id,
+    time:           fmtTime(t.created_at),
+    action:         t.side === 'hit' ? 'HIT' : 'LIFT',
+    series:         t.series_number,
+    tranche:        t.tranche_name,
+    price:          t.price,
+    dealer:         t.dealer        ?? null,
+    passive_dealer: t.passive_dealer ?? null,
+  }
+}
+
 export default function MarketPage() {
   const [profile,      setProfile]      = useState<Profile | null>(null)
   const [authChecked,  setAuthChecked]  = useState(false)
@@ -141,20 +154,10 @@ export default function MarketPage() {
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
-        const t = payload.new as any
-        const key = `${t.series_number}:${t.tranche_name}`
-        flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
-        setLastTrade({ series: t.series_number, tranche: t.tranche_name, price: t.price, time: fmtTime(t.created_at) })
-        setBlotter(prev => [{
-          id: t.id,
-          time: fmtTime(t.created_at),
-          action: t.side === 'hit' ? 'HIT' : 'LIFT',
-          series: t.series_number,
-          tranche: t.tranche_name,
-          price: t.price,
-          dealer: t.dealer ?? null,
-          passive_dealer: t.passive_dealer ?? null,
-        }, ...prev].slice(0, 100))
+        const entry = mapTrade(payload.new)
+        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green')
+        setLastTrade({ series: entry.series, tranche: entry.tranche, price: entry.price, time: entry.time })
+        setBlotter(prev => [entry, ...prev].slice(0, 100))
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trades' }, (payload) => {
         const id = (payload.old as any).id
@@ -183,18 +186,7 @@ export default function MarketPage() {
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
         setPrices(map)
       }
-      if (tr) {
-        setBlotter(tr.map((t: any) => ({
-          id: t.id,
-          time: fmtTime(t.created_at),
-          action: t.side === 'hit' ? 'HIT' : 'LIFT',
-          series: t.series_number,
-          tranche: t.tranche_name,
-          price: t.price,
-          dealer: t.dealer ?? null,
-          passive_dealer: t.passive_dealer ?? null,
-        })))
-      }
+      if (tr) setBlotter(tr.map(mapTrade))
     }
 
     loadData()
