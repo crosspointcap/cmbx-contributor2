@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 
@@ -81,6 +81,7 @@ export default function MarketPage() {
   const [lastTrade,    setLastTrade]    = useState<{ series: string; tranche: string; price: number | null; time: string } | null>(null)
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
   const [blotter, setBlotter] = useState<BlotterEntry[]>([])
+  const defaultsApplied = useRef(false)
 
   function toggleCollapse(seriesNum: string) {
     setCollapsedSeries(prev => {
@@ -169,7 +170,13 @@ export default function MarketPage() {
         supabase.from('trades').select('id, side, series_number, tranche_name, price, created_at, dealer, passive_dealer').order('created_at', { ascending: false }).limit(100),
       ])
       if (cancelled) return
-      if (sd) setSeries(sd)
+      if (sd) {
+        setSeries(sd)
+        if (!defaultsApplied.current) {
+          setCollapsedSeries(new Set(sd.map((s: SeriesConfig) => s.series_number)))
+          defaultsApplied.current = true
+        }
+      }
       if (td) setTranches(td)
       if (pd) {
         const map: Record<string, Price> = {}
@@ -283,8 +290,7 @@ export default function MarketPage() {
                     </td>
                   </tr>
 
-                  {tranches.filter(t => {
-                    if (!isCollapsed) return true
+                  {isCollapsed ? null : tranches.filter(t => {
                     const p = prices[`${s.series_number}:${t.tranche_name}`]
                     return p?.bid != null || p?.ask != null || p?.last_trade_px != null
                   }).map((t, tIdx) => {
@@ -337,6 +343,7 @@ export default function MarketPage() {
                     )
                   })}
                 </Fragment>
+
               )
             })}
           </tbody>

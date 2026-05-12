@@ -224,6 +224,12 @@ export default function HistoryPage() {
     setLoading(false)
   }
 
+  // ── Delete a price_changes entry (trader only) ───────────────────────────────
+  async function deletePriceChange(id: string) {
+    const { error } = await supabase.from('price_changes').delete().eq('id', id)
+    if (!error) setPriceChanges(prev => prev.filter(pc => pc.id !== id))
+  }
+
   // ── Build date → market context lookup ───────────────────────────────────────
   const ctxByDate = useMemo(() => {
     const map: Record<string, MarketContext> = {}
@@ -418,11 +424,12 @@ export default function HistoryPage() {
                   <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #eebb00', fontWeight: 700 }}>CDX HY</th>
                   <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #44ddaa', fontWeight: 700 }}>CDX IG</th>
                   <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
+                  {isTrader && <th style={{ padding: '4px 8px', borderBottom: '1px solid #1a1a1a' }}></th>}
                 </tr>
               </thead>
               <tbody>
                 {priceChanges.length === 0 ? (
-                  <tr><td colSpan={10} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no price activity for selected range</td></tr>
+                  <tr><td colSpan={isTrader ? 11 : 10} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>— no price activity for selected range</td></tr>
                 ) : priceChanges.map((pc, i) => {
                   const key = `${pc.series_number}:${pc.tranche_name}`
                   const isSelected = key === selectedChartKey
@@ -453,6 +460,16 @@ export default function HistoryPage() {
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: pcCdxHy != null ? '#eebb00' : '#2a2a2a' }}>{pcCdxHy != null ? pcCdxHy.toFixed(1) : '—'}</td>
                       <td style={{ textAlign: 'right', padding: '3px 6px',  color: pcCdxIg != null ? '#44ddaa' : '#2a2a2a' }}>{pcCdxIg != null ? pcCdxIg.toFixed(1) : '—'}</td>
                       <td style={{ textAlign: 'right', padding: '3px 12px', color: ctx?.spx_close != null ? '#3388ff' : '#2a2a2a' }}>{ctx?.spx_close != null ? ctx.spx_close.toLocaleString() : '—'}</td>
+                      {isTrader && (
+                        <td style={{ padding: '3px 6px', textAlign: 'center' }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); deletePriceChange(pc.id) }}
+                            style={{ background: 'transparent', border: 'none', color: '#442222', cursor: 'pointer', fontSize: '13px', padding: '0 4px', fontFamily: 'Courier New', lineHeight: 1 }}
+                            onMouseEnter={e => (e.currentTarget.style.color = '#ff4444')}
+                            onMouseLeave={e => (e.currentTarget.style.color = '#442222')}
+                          >×</button>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
