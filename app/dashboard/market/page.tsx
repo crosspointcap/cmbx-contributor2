@@ -153,6 +153,21 @@ export default function MarketPage() {
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
+            style={{
+              background: 'transparent',
+              color: '#555',
+              border: '1px solid #2a2a2a',
+              padding: '2px 8px',
+              fontSize: '13px',
+              fontFamily: 'Courier New, monospace',
+              cursor: 'pointer',
+              borderRadius: '2px',
+            }}
+          >
+            SIGN OUT
+          </button>
         </div>
       </div>
 
