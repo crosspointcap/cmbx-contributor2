@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { NavTabs } from '../NavTabs'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -148,6 +149,9 @@ export default function MarketPage() {
           SIGN OUT
         </button>
       </div>
+
+      {/* Nav tabs — dealers see MARKET + HISTORY only, no ADMIN */}
+      <NavTabs active="market" isTrader={false} />
 
       {/* Grid */}
       <div style={{ flex: 1, overflow: 'auto' }}>

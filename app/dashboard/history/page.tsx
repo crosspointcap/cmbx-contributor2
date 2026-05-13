@@ -66,7 +66,6 @@ const DATE_INPUT_STYLE: React.CSSProperties = {
 }
 
 export default function HistoryPage() {
-  const [authChecked,  setAuthChecked]  = useState(false)
   const [quickRange,   setQuickRange]   = useState<QuickRange>('1D')
   const [customFrom,   setCustomFrom]   = useState('')
   const [customTo,     setCustomTo]     = useState('')
@@ -80,22 +79,14 @@ export default function HistoryPage() {
 
   const usingCustomRange = !!(customFrom && customTo)
 
-  // ── Auth guard — history is admin-only ───────────────────────────────────────
+  // ── Check role (soft — no redirect; dealers can view history with limited info) ─
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        window.location.href = '/dashboard/market'
-        return
-      }
+      if (!session) return
       supabase.from('profiles').select('role, dealer_code').eq('id', session.user.id).single()
         .then(({ data }) => {
-          if (!data || data.role !== 'trader') {
-            window.location.href = '/dashboard/market'
-            return
-          }
-          setIsTrader(true)
-          setMyDealerCode(data.dealer_code ?? null)
-          setAuthChecked(true)
+          if (data?.role === 'trader') setIsTrader(true)
+          setMyDealerCode(data?.dealer_code ?? null)
         })
     })
   }, [])
@@ -114,7 +105,6 @@ export default function HistoryPage() {
 
   // ── Realtime: stream new entries live ────────────────────────────────────────
   useEffect(() => {
-    if (!authChecked) return
     const ch = supabase
       .channel(`history-rt-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'price_changes' }, (payload) => {
@@ -147,10 +137,10 @@ export default function HistoryPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(ch); supabase.removeChannel(broadcastCh) }
-  }, [authChecked])
+  }, [])
 
   // ── Initial load ─────────────────────────────────────────────────────────────
-  useEffect(() => { if (authChecked) loadData(getStartDate('1D'), null) }, [authChecked]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(getStartDate('1D'), null) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadData(startDate: string | null, endDate: string | null) {
     setLoading(true)
@@ -290,14 +280,6 @@ export default function HistoryPage() {
       )
     })
   }, [trades, q, isTrader, myDealerCode])
-
-  if (!authChecked) {
-    return (
-      <div style={{ background: '#0a0a0a', color: '#444', fontFamily: 'Courier New, monospace', fontSize: '14px', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        AUTHENTICATING...
-      </div>
-    )
-  }
 
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
