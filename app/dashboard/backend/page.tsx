@@ -787,131 +787,73 @@ export default function BackendPage() {
       {/* Nav tabs */}
       <NavTabs active="admin" isTrader={true} />
 
-      {/* Dealer buttons */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', padding: '5px 12px', gap: '4px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
+      {/* Dealer + action — single combined row */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', padding: '3px 10px', gap: '3px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
+
+        {/* Dealer buttons with pull/restore badges */}
         {DEALERS.map(code => {
           const count    = dealerLiveCount(code)
           const isPulled = !!pulledPrices[code]?.length
           const s        = DEALER_INACTIVE[code]
           return (
-            <div key={code} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+            <div key={code} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
               <button onClick={() => handleDealerClick(code)} style={dealerButtonStyle(code, selectedDealer === code)}>
                 {code}
               </button>
               {isPulled ? (
-                <button
-                  onClick={() => restoreDealerPrices(code)}
-                  title={`Restore ${pulledPrices[code].length} ${code} prices`}
-                  style={{ background: '#0a1a0a', color: '#66ff88', border: '1px solid #336633', padding: '1px 5px', fontSize: '10px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '13px', whiteSpace: 'nowrap' }}
-                >↩ {pulledPrices[code].length}</button>
+                <button onClick={() => restoreDealerPrices(code)} title={`Restore ${pulledPrices[code].length} ${code} prices`}
+                  style={{ background: '#0a1a0a', color: '#66ff88', border: '1px solid #336633', padding: '0 4px', fontSize: '9px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '12px', whiteSpace: 'nowrap' }}>
+                  ↩{pulledPrices[code].length}
+                </button>
               ) : count > 0 ? (
-                <button
-                  onClick={() => pullDealerPrices(code)}
-                  title={`Pull all ${count} ${code} prices`}
-                  style={{ background: 'transparent', color: s?.color + '99', border: `1px solid ${s?.border}55`, padding: '1px 5px', fontSize: '10px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '13px', whiteSpace: 'nowrap' }}
-                >↓ {count}</button>
-              ) : (
-                <span style={{ height: '15px' }} />
-              )}
+                <button onClick={() => pullDealerPrices(code)} title={`Pull all ${count} ${code} prices`}
+                  style={{ background: 'transparent', color: s?.color + '99', border: `1px solid ${s?.border}44`, padding: '0 4px', fontSize: '9px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '12px', whiteSpace: 'nowrap' }}>
+                  ↓{count}
+                </button>
+              ) : <span style={{ height: '12px' }} />}
             </div>
           )
         })}
-        <span style={{ marginLeft: '10px', fontSize: '15px', color: selectedDealer ? '#f0c040' : '#444', alignSelf: 'center' }}>
-          {selectedDealer ? `SELECTED: ${selectedDealer}` : '— no counterparty selected'}
-        </span>
-        {cellError && (
-          <span style={{ marginLeft: '12px', color: '#ff4444', fontSize: '15px', alignSelf: 'center' }}>{cellError}</span>
-        )}
-      </div>
 
-      {/* Action row */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', gap: '6px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
-        <button
-          onClick={() => executeTrade('hit')}
-          style={{
-            background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333',
-            padding: '3px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace',
-            borderRadius: '2px', cursor: 'pointer', fontWeight: 700,
-            animation: hitShake ? 'shake 0.5s ease' : 'none',
-          }}
-        >
+        {/* Selected / error */}
+        <span style={{ fontSize: '13px', color: selectedDealer ? '#f0c040' : '#333', alignSelf: 'center', marginLeft: '6px', whiteSpace: 'nowrap' }}>
+          {selectedDealer ?? '—'}
+        </span>
+        {cellError && <span style={{ color: '#ff4444', fontSize: '12px', alignSelf: 'center', marginLeft: '4px' }}>{cellError}</span>}
+
+        {/* Divider */}
+        <span style={{ color: '#2a2a2a', alignSelf: 'center', padding: '0 4px' }}>│</span>
+
+        {/* HIT / LIFT / BULK */}
+        <button onClick={() => executeTrade('hit')}
+          style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: hitShake ? 'shake 0.5s ease' : 'none' }}>
           HIT
         </button>
-        <button
-          onClick={() => executeTrade('lift')}
-          style={{
-            background: '#003a00', color: '#66ff88', border: '1px solid #338833',
-            padding: '3px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace',
-            borderRadius: '2px', cursor: 'pointer', fontWeight: 700,
-            animation: liftShake ? 'shake 0.5s ease' : 'none',
-          }}
-        >
+        <button onClick={() => executeTrade('lift')}
+          style={{ background: '#003a00', color: '#66ff88', border: '1px solid #338833', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: liftShake ? 'shake 0.5s ease' : 'none' }}>
           LIFT
         </button>
-        <span style={{ color: '#444', fontSize: '13px', marginLeft: '10px' }}>
-          <span style={{ color: '#888' }}>80-16</span> or <span style={{ color: '#888' }}>$80-16</span> 32nds · <span style={{ color: '#888' }}>$85.50</span> price · <span style={{ color: '#888' }}>285</span> spread
-        </span>
-        <button
-          onClick={() => setShowBulkInput(true)}
-          style={{
-            background: '#0a1a0a', color: '#66ff88', border: '1px solid #336633',
-            padding: '3px 14px', fontSize: '15px', fontFamily: 'Courier New, monospace',
-            borderRadius: '2px', cursor: 'pointer', fontWeight: 700, marginLeft: '12px',
-          }}
-        >
+        <button onClick={() => setShowBulkInput(true)}
+          style={{ background: '#0a1a0a', color: '#66ff88', border: '1px solid #336633', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center' }}>
           BULK
         </button>
-        <button
-          onClick={() => setShowEmptyRows(v => !v)}
-          style={{
-            marginLeft: 'auto',
-            background: showEmptyRows ? '#1a1a00' : 'transparent',
-            color: showEmptyRows ? '#f0c040' : '#444',
-            border: `1px solid ${showEmptyRows ? '#f0c040' : '#2a2a2a'}`,
-            padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
-            cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
-          }}
-        >
-          {showEmptyRows ? '▼ HIDE EMPTY' : '▶ SHOW EMPTY'}
+
+        {/* Right-side controls */}
+        <button onClick={() => setShowEmptyRows(v => !v)}
+          style={{ marginLeft: 'auto', background: showEmptyRows ? '#1a1a00' : 'transparent', color: showEmptyRows ? '#f0c040' : '#3a3a3a', border: `1px solid ${showEmptyRows ? '#f0c040' : '#222'}`, padding: '2px 7px', fontSize: '10px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', alignSelf: 'center' }}>
+          {showEmptyRows ? 'HIDE∅' : 'SHOW∅'}
         </button>
-        <span style={{ color: '#333', fontSize: '15px', paddingRight: '2px' }}>
-          hover a BID / ASK / SIZE cell → click → type → Enter to save
-        </span>
 
         {!confirmClear ? (
-          <button
-            onClick={() => setConfirmClear(true)}
-            style={{
-              background: 'transparent', color: '#444', border: '1px solid #2a2a2a',
-              padding: '3px 12px', fontSize: '15px', fontFamily: 'Courier New, monospace',
-              borderRadius: '2px', cursor: 'pointer', marginLeft: '8px',
-            }}
-          >
-            CLEAR ALL
+          <button onClick={() => setConfirmClear(true)}
+            style={{ background: 'transparent', color: '#3a3a3a', border: '1px solid #222', padding: '2px 7px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', alignSelf: 'center' }}>
+            CLR
           </button>
         ) : (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px' }}>
-            <span style={{ color: '#ff4444', fontSize: '15px' }}>clear all prices?</span>
-            <button
-              onClick={clearAllPrices}
-              style={{
-                background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333',
-                padding: '3px 12px', fontSize: '15px', fontFamily: 'Courier New, monospace',
-                borderRadius: '2px', cursor: 'pointer', fontWeight: 700,
-              }}
-            >
-              YES
-            </button>
-            <button
-              onClick={() => setConfirmClear(false)}
-              style={{
-                background: '#111', color: '#555', border: '1px solid #2a2a2a',
-                padding: '3px 12px', fontSize: '15px', fontFamily: 'Courier New, monospace',
-                borderRadius: '2px', cursor: 'pointer',
-              }}
-            >
-              NO
-            </button>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '3px', alignSelf: 'center' }}>
+            <span style={{ color: '#ff4444', fontSize: '10px' }}>clear?</span>
+            <button onClick={clearAllPrices} style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700 }}>YES</button>
+            <button onClick={() => setConfirmClear(false)} style={{ background: '#111', color: '#555', border: '1px solid #222', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer' }}>NO</button>
           </span>
         )}
       </div>
