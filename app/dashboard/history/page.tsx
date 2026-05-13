@@ -356,7 +356,7 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
                     <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
-                      {spx != null ? spx.toLocaleString() : '—'}
+                      {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
@@ -423,7 +423,7 @@ export default function HistoryPage() {
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
                     <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
-                      {spx != null ? spx.toLocaleString() : '—'}
+                      {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
                   </tr>
                 )
