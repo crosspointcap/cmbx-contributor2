@@ -265,6 +265,9 @@ export default function BackendPage() {
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
+  const [cdxDisplay,   setCdxDisplay]   = useState<{ hy: number | null; ig: number | null }>({ hy: null, ig: null })
+  const [cdxHyInput,   setCdxHyInput]   = useState('')
+  const [cdxIgInput,   setCdxIgInput]   = useState('')
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
     series_number: string; tranche_name: string; mode?: string | null
     bid?: number | null; bid_size?: string | null
@@ -373,7 +376,10 @@ export default function BackendPage() {
       try {
         const res = await fetch('/api/cdx')
         const { cdx_hy, cdx_ig } = await res.json()
-        latestCdxRef.current = { hy: cdx_hy ?? null, ig: cdx_ig ?? null }
+        const hy = cdx_hy ?? null
+        const ig = cdx_ig ?? null
+        latestCdxRef.current = { hy, ig }
+        if (hy != null || ig != null) setCdxDisplay({ hy, ig })
       } catch {}
     }
 
@@ -550,6 +556,24 @@ export default function BackendPage() {
     setTradeLog(null)
     setSelectedRow(null)
     setConfirmClear(false)
+  }
+
+  async function pushCdx() {
+    const hy = parseFloat(cdxHyInput.trim()) || null
+    const ig = parseFloat(cdxIgInput.trim()) || null
+    const today = new Date().toISOString().split('T')[0]
+    try {
+      const { data: existing } = await supabase.from('market_context').select('date').eq('date', today).maybeSingle()
+      if (existing) {
+        await supabase.from('market_context').update({ cdx_hy_spread: hy, cdx_ig_spread: ig }).eq('date', today)
+      } else {
+        await supabase.from('market_context').insert({ date: today, cdx_hy_spread: hy, cdx_ig_spread: ig })
+      }
+      latestCdxRef.current = { hy, ig }
+      setCdxDisplay({ hy, ig })
+    } catch (err) {
+      showError('CDX push failed')
+    }
   }
 
   function showError(msg: string) {
@@ -856,6 +880,38 @@ export default function BackendPage() {
             <span style={{ color: '#ff4444', fontSize: '10px' }}>clear?</span>
             <button onClick={clearAllPrices} style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700 }}>YES</button>
             <button onClick={() => setConfirmClear(false)} style={{ background: '#111', color: '#555', border: '1px solid #222', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer' }}>NO</button>
+          </span>
+        )}
+      </div>
+
+      {/* CDX manual entry strip */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, background: '#060606' }}>
+        <span style={{ color: '#444', fontSize: '10px', letterSpacing: '1px' }}>CDX</span>
+        <span style={{ color: '#555', fontSize: '10px' }}>HY</span>
+        <input
+          value={cdxHyInput}
+          onChange={e => setCdxHyInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && pushCdx()}
+          placeholder={cdxDisplay.hy != null ? String(Math.round(cdxDisplay.hy)) : '—'}
+          style={{ background: '#111', color: '#ff8844', border: '1px solid #2a2a2a', fontFamily: 'Courier New, monospace', fontSize: '11px', padding: '1px 5px', width: '48px', outline: 'none' }}
+        />
+        <span style={{ color: '#555', fontSize: '10px' }}>IG</span>
+        <input
+          value={cdxIgInput}
+          onChange={e => setCdxIgInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && pushCdx()}
+          placeholder={cdxDisplay.ig != null ? String(Math.round(cdxDisplay.ig)) : '—'}
+          style={{ background: '#111', color: '#88ccaa', border: '1px solid #2a2a2a', fontFamily: 'Courier New, monospace', fontSize: '11px', padding: '1px 5px', width: '48px', outline: 'none' }}
+        />
+        <button onClick={pushCdx}
+          style={{ background: 'transparent', color: '#555', border: '1px solid #2a2a2a', padding: '1px 8px', fontSize: '10px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}>
+          PUSH
+        </button>
+        {cdxDisplay.hy != null && (
+          <span style={{ color: '#333', fontSize: '10px', marginLeft: '4px' }}>
+            HY <span style={{ color: '#ff8844' }}>{Math.round(cdxDisplay.hy)}</span>
+            <span style={{ margin: '0 4px' }}>·</span>
+            IG <span style={{ color: '#88ccaa' }}>{cdxDisplay.ig != null ? Math.round(cdxDisplay.ig) : '—'}</span>
           </span>
         )}
       </div>
