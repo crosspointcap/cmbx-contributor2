@@ -63,6 +63,14 @@ export function fmtDate(ts: string): string {
   }).format(new Date(ts))
 }
 
+// Compact date: "5/13" — for tight table columns
+export function fmtShortDate(ts: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: 'numeric', day: 'numeric',
+  }).format(new Date(ts))
+}
+
 // 32nds parser: "80-01" → 80.03125,  "80-16" → 80.5,  "80-31" → 80.96875
 export function parse32nds(val: string): number | null {
   const m = val.trim().match(/^(\d+)-(\d{1,2})$/)

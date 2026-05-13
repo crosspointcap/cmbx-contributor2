@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { fmt32nds, formatPx, fmtTime, fmtDate } from '../../../lib/utils'
+import { fmt32nds, formatPx, fmtTime, fmtShortDate } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -338,11 +338,11 @@ export default function HistoryPage() {
               <tr style={{ color: '#fff', fontSize: '12px', position: 'sticky', top: '26px', background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
                 <th style={{ textAlign: 'left',   padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
                 <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
-                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DEALER</th>
+                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DLR</th>
                 <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
                 <th style={{ textAlign: 'center', padding: '4px 6px',  borderBottom: '2px solid #888',    fontWeight: 700 }}>SIDE</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SPREAD</th>
-                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
+                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SZ</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
                 <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY</th>
                 {isTrader && <th style={{ padding: '4px 8px', borderBottom: '1px solid #1a1a1a' }} />}
@@ -361,13 +361,13 @@ export default function HistoryPage() {
                 const hyg           = hygFor(pc.created_at)
                 return (
                   <tr key={pc.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(pc.created_at)}</td>
+                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtShortDate(pc.created_at)}</td>
                     <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(pc.created_at)}</td>
                     <td style={{ padding: '3px 6px',  color: dealerColor, fontWeight: 700 }}>{visibleDealer}</td>
-                    <td style={{ padding: '3px 6px',  color: '#aaa' }}>CMBX.{pc.series_number}.{pc.tranche_name}</td>
+                    <td style={{ padding: '3px 6px',  color: '#aaa' }}>{pc.tranche_name}.{pc.series_number}</td>
                     <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
-                    <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
+                    <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size ?? '—'}</td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
@@ -410,7 +410,7 @@ export default function HistoryPage() {
                 {isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SELLER</th>}
                 {!isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>CPTY</th>}
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
-                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
+                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SZ</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
                 <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY</th>
               </tr>
@@ -430,16 +430,16 @@ export default function HistoryPage() {
                 const hyg    = hygFor(t.created_at)
                 return (
                   <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
+                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtShortDate(t.created_at)}</td>
                     <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
-                    <td style={{ padding: '3px 6px',  color: '#fff' }}>CMBX.{t.series_number}.{t.tranche_name}</td>
+                    <td style={{ padding: '3px 6px',  color: '#fff' }}>{t.tranche_name}.{t.series_number}</td>
                     {isTrader && <td style={{ padding: '3px 6px', color: '#66ff88', fontWeight: 700 }}>{buyer ?? '—'}</td>}
                     {isTrader && <td style={{ padding: '3px 6px', color: '#ff6666', fontWeight: 700 }}>{seller ?? '—'}</td>}
                     {!isTrader && <td style={{ padding: '3px 6px', color: DEALER_COLORS[cpty ?? ''] ?? '#666', fontWeight: 700 }}>{cpty ?? '—'}</td>}
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: '#f0c040', fontWeight: 700 }}>
                       {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
                     </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
+                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size ?? '—'}</td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
