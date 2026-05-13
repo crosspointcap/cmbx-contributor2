@@ -42,6 +42,7 @@ interface TradeRow {
 interface DailyClose {
   date: string
   spx_close: number | null
+  hyg_close: number | null
 }
 
 function getStartDate(range: QuickRange): string | null {
@@ -145,7 +146,7 @@ export default function HistoryPage() {
 
       let ctxQ = supabase
         .from('market_context')
-        .select('date, spx_close')
+        .select('date, spx_close, hyg_close')
         .order('date', { ascending: true })
         .limit(400)
 
@@ -194,16 +195,26 @@ export default function HistoryPage() {
     if (!error) setPriceChanges(prev => prev.filter(pc => pc.id !== id))
   }
 
-  // ── SPX lookup: exact stamp if available, fall back to EOD close by date ──
+  // ── Market context lookups by date ───────────────────────────────────────
   const spxByDate = useMemo(() => {
     const map: Record<string, number | null> = {}
     for (const c of dailyCloses) map[c.date] = c.spx_close
     return map
   }, [dailyCloses])
 
+  const hygByDate = useMemo(() => {
+    const map: Record<string, number | null> = {}
+    for (const c of dailyCloses) map[c.date] = c.hyg_close
+    return map
+  }, [dailyCloses])
+
   function spxFor(ts: string, spx_at_time: number | null): number | null {
     if (spx_at_time != null) return spx_at_time          // exact intraday stamp
     return spxByDate[ts.split('T')[0]] ?? null            // fall back to EOD close
+  }
+
+  function hygFor(ts: string): number | null {
+    return hygByDate[ts.split('T')[0]] ?? null
   }
 
   // ── Client-side search filter ─────────────────────────────────────────────
@@ -332,13 +343,14 @@ export default function HistoryPage() {
                 <th style={{ textAlign: 'center', padding: '4px 6px',  borderBottom: '2px solid #888',    fontWeight: 700 }}>SIDE</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SPREAD</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
-                <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
+                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
+                <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY</th>
                 {isTrader && <th style={{ padding: '4px 8px', borderBottom: '1px solid #1a1a1a' }} />}
               </tr>
             </thead>
             <tbody>
               {filteredPriceChanges.length === 0 ? (
-                <tr><td colSpan={isTrader ? 9 : 8} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 10 : 9} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no price activity for selected range'}
                 </td></tr>
               ) : filteredPriceChanges.map((pc, i) => {
@@ -346,6 +358,7 @@ export default function HistoryPage() {
                 const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
                 const dealerColor   = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
                 const spx           = spxFor(pc.created_at, pc.spx_at_time)
+                const hyg           = hygFor(pc.created_at)
                 return (
                   <tr key={pc.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
                     <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(pc.created_at)}</td>
@@ -355,8 +368,11 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: hyg != null ? '#ff8844' : '#2a2a2a' }}>
+                      {hyg != null ? hyg.toFixed(2) : '—'}
                     </td>
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
@@ -395,12 +411,13 @@ export default function HistoryPage() {
                 {!isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>CPTY</th>}
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SIZE</th>
-                <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
+                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
+                <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY</th>
               </tr>
             </thead>
             <tbody>
               {filteredTrades.length === 0 ? (
-                <tr><td colSpan={isTrader ? 8 : 7} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 9 : 8} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
                 </td></tr>
               ) : filteredTrades.map((t, i) => {
@@ -410,6 +427,7 @@ export default function HistoryPage() {
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
                 const spx    = spxFor(t.created_at, t.spx_at_time)
+                const hyg    = hygFor(t.created_at)
                 return (
                   <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
                     <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
@@ -422,8 +440,11 @@ export default function HistoryPage() {
                       {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: hyg != null ? '#ff8844' : '#2a2a2a' }}>
+                      {hyg != null ? hyg.toFixed(2) : '—'}
                     </td>
                   </tr>
                 )
