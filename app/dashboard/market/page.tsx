@@ -63,6 +63,17 @@ interface TradeEntry {
   passive_dealer: string | null
 }
 
+type ColKey = 'bid' | 'ask' | 'bsz' | 'asz' | 'lastpx' | 'time'
+
+const ALL_COLS: { key: ColKey; label: string }[] = [
+  { key: 'bid',    label: 'BID'     },
+  { key: 'ask',    label: 'ASK'     },
+  { key: 'bsz',   label: 'B.SZ'    },
+  { key: 'asz',   label: 'A.SZ'    },
+  { key: 'lastpx',label: 'LAST PX' },
+  { key: 'time',  label: 'TIME'    },
+]
+
 export default function MarketPage() {
   const [series, setSeries] = useState<SeriesConfig[]>([])
   const [tranches, setTranches] = useState<TrancheConfig[]>([])
@@ -70,6 +81,7 @@ export default function MarketPage() {
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
   const [trades, setTrades] = useState<TradeEntry[]>([])
   const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
+  const [hiddenCols, setHiddenCols] = useState<Set<ColKey>>(new Set())
 
   // ── Soft auth check — get dealer identity if logged in ────────────────────
   useEffect(() => {
@@ -79,6 +91,24 @@ export default function MarketPage() {
         .then(({ data }) => { if (data?.dealer_code) setMyDealerCode(data.dealer_code) })
     })
   }, [])
+
+  // ── Column visibility — persist to localStorage ───────────────────────────
+  useEffect(() => {
+    const saved = localStorage.getItem('cmbx_market_hidden_cols')
+    if (saved) {
+      try { setHiddenCols(new Set(JSON.parse(saved) as ColKey[])) } catch {}
+    }
+  }, [])
+
+  function toggleCol(key: ColKey) {
+    setHiddenCols(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      localStorage.setItem('cmbx_market_hidden_cols', JSON.stringify([...next]))
+      return next
+    })
+  }
 
   // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ─────────
   useEffect(() => {
@@ -186,6 +216,33 @@ export default function MarketPage() {
       {/* Nav tabs — dealers see MARKET + HISTORY only, no ADMIN */}
       <NavTabs active="market" isTrader={false} />
 
+      {/* Column visibility toggles */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#060606' }}>
+        <span style={{ color: '#2a2a2a', fontSize: '11px', marginRight: '2px', letterSpacing: '1px' }}>COLS</span>
+        {ALL_COLS.map(col => {
+          const hidden = hiddenCols.has(col.key)
+          return (
+            <button
+              key={col.key}
+              onClick={() => toggleCol(col.key)}
+              style={{
+                background: hidden ? 'transparent' : '#1a1a1a',
+                color: hidden ? '#2a2a2a' : '#666',
+                border: `1px solid ${hidden ? '#1a1a1a' : '#333'}`,
+                padding: '1px 7px',
+                fontSize: '10px',
+                fontFamily: 'Courier New, monospace',
+                cursor: 'pointer',
+                borderRadius: '2px',
+                textDecoration: hidden ? 'line-through' : 'none',
+              }}
+            >
+              {col.label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Main content: price grid (left) + trade history (right) */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
@@ -195,12 +252,12 @@ export default function MarketPage() {
             <thead>
               <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
                 <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1e1e1e', width: '130px', fontWeight: 400 }}>TRANCHE</th>
-                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>BID</th>
-                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>ASK</th>
-                <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>B.SZ</th>
-                <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>A.SZ</th>
-                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>LAST PX</th>
-                <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '80px', fontWeight: 400 }}>TIME</th>
+                {!hiddenCols.has('bid')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>BID</th>}
+                {!hiddenCols.has('ask')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>ASK</th>}
+                {!hiddenCols.has('bsz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>B.SZ</th>}
+                {!hiddenCols.has('asz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>A.SZ</th>}
+                {!hiddenCols.has('lastpx') && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>LAST PX</th>}
+                {!hiddenCols.has('time')   && <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '80px', fontWeight: 400 }}>TIME</th>}
               </tr>
             </thead>
             <tbody>
@@ -210,11 +267,12 @@ export default function MarketPage() {
                   return p?.bid != null || p?.ask != null || p?.last_trade_px != null
                 })
                 if (visibleTranches.length === 0) return null
+                const visibleColCount = 1 + ALL_COLS.filter(c => !hiddenCols.has(c.key)).length
                 return (
                   <Fragment key={s.series_number}>
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={visibleColCount}
                         style={{
                           padding: '7px 12px 4px',
                           color: '#f0c040',
@@ -254,24 +312,36 @@ export default function MarketPage() {
                           <td style={{ padding: '5px 6px 5px 10px', color: '#ffffff', whiteSpace: 'nowrap', width: '130px' }}>
                             CMBX.{s.series_number}.{t.tranche_name}
                           </td>
-                          <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor }}>
-                            {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor }}>
-                            {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>
-                            {price?.bid_size != null ? String(price.bid_size) : '—'}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>
-                            {price?.ask_size != null ? String(price.ask_size) : '—'}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '5px 10px', color: price?.last_trade_px != null ? '#888' : '#2a2a2a' }}>
-                            {price?.last_trade_px != null ? formatPx(price.last_trade_px, price.mode) : '—'}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '5px 12px 5px 8px', color: '#444' }}>
-                            {price?.last_trade_time ? fmtTime(price.last_trade_time) : <span style={{ color: '#2a2a2a' }}>—</span>}
-                          </td>
+                          {!hiddenCols.has('bid') && (
+                            <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor }}>
+                              {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                            </td>
+                          )}
+                          {!hiddenCols.has('ask') && (
+                            <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor }}>
+                              {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                            </td>
+                          )}
+                          {!hiddenCols.has('bsz') && (
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>
+                              {price?.bid_size != null ? String(price.bid_size) : '—'}
+                            </td>
+                          )}
+                          {!hiddenCols.has('asz') && (
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>
+                              {price?.ask_size != null ? String(price.ask_size) : '—'}
+                            </td>
+                          )}
+                          {!hiddenCols.has('lastpx') && (
+                            <td style={{ textAlign: 'right', padding: '5px 10px', color: price?.last_trade_px != null ? '#888' : '#2a2a2a' }}>
+                              {price?.last_trade_px != null ? formatPx(price.last_trade_px, price.mode) : '—'}
+                            </td>
+                          )}
+                          {!hiddenCols.has('time') && (
+                            <td style={{ textAlign: 'right', padding: '5px 12px 5px 8px', color: '#444' }}>
+                              {price?.last_trade_time ? fmtTime(price.last_trade_time) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                            </td>
+                          )}
                         </tr>
                       )
                     })}
