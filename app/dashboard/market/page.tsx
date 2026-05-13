@@ -153,9 +153,6 @@ export default function MarketPage() {
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
-          <a href="/dashboard/backend" style={{ color: '#555', fontSize: '13px', border: '1px solid #2a2a2a', padding: '2px 8px', textDecoration: 'none', borderRadius: '2px' }}>
-            BACKEND
-          </a>
         </div>
       </div>
 
