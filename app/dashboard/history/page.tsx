@@ -236,7 +236,7 @@ export default function HistoryPage() {
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
         <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
-          CMBX HISTORY — CROSSPOINT CAPITAL
+          CMBX HISTORY — CROSSPOINT
         </span>
         <button
           onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}

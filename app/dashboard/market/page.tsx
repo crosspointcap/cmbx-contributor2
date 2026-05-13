@@ -120,6 +120,7 @@ export default function MarketPage() {
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
   const [blotter,         setBlotter]         = useState<BlotterEntry[]>([])
   const [layout,          setLayout]          = useState<Layout>({ showSizes: true, showLast: true, showFeed: true })
+  const [ghostPrices,     setGhostPrices]     = useState<Record<string, { bid?: number; ask?: number; mode?: string | null }>>({})
   const defaultsApplied = useRef(false)
   const flashTimers     = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
@@ -188,7 +189,18 @@ export default function MarketPage() {
           })
         } else {
           const p = payload.new as Price
-          setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
+          const key = `${p.series_number}:${p.tranche_name}`
+          setPrices(prev => ({ ...prev, [key]: p }))
+          if (p.bid != null || p.ask != null) {
+            setGhostPrices(prev => ({
+              ...prev,
+              [key]: {
+                ...prev[key],
+                ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
+                ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
+              }
+            }))
+          }
           // Auto-expand series when a live price arrives
           if (p.bid != null || p.ask != null || p.last_trade_px != null) {
             setCollapsedSeries(prev => {
@@ -239,8 +251,19 @@ export default function MarketPage() {
         if (td) setTranches(td)
         if (pd) {
           const map: Record<string, Price> = {}
-          for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
+          const ghosts: Record<string, { bid?: number; ask?: number; mode?: string | null }> = {}
+          for (const p of pd) {
+            const k = `${p.series_number}:${p.tranche_name}`
+            map[k] = p
+            if (p.bid != null || p.ask != null) {
+              ghosts[k] = {
+                ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
+                ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
+              }
+            }
+          }
           setPrices(map)
+          setGhostPrices(ghosts)
         }
         if (tr) setBlotter(tr.map(mapTrade))
       } catch (err) {
@@ -291,7 +314,7 @@ export default function MarketPage() {
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
         <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
-          CMBX MARKET — CROSSPOINT CAPITAL
+          CMBX MARKET — CROSSPOINT
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {myCode && (
@@ -327,17 +350,17 @@ export default function MarketPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
             <thead>
               <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-                <th style={{ textAlign: 'left',  padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '180px', fontWeight: 700 }}>TRANCHE</th>
+                <th style={{ textAlign: 'left',   padding: '6px 8px 6px 12px', borderBottom: '1px solid #1e1e1e', width: '180px',  fontWeight: 700 }}>TRANCHE</th>
                 {layout.showSizes && (
-                  <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+                  <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
                 )}
-                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
-                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
+                <th style={{ textAlign: 'center', padding: '5px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
+                <th style={{ textAlign: 'center', padding: '5px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
                 {layout.showSizes && (
-                  <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
+                  <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
                 )}
                 {layout.showLast && (
-                  <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '130px', fontWeight: 700 }}>LST TRADE PX</th>
+                  <th style={{ textAlign: 'right',  padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '130px', fontWeight: 700 }}>LST TRADE PX</th>
                 )}
               </tr>
             </thead>
@@ -367,14 +390,20 @@ export default function MarketPage() {
 
                     {isCollapsed ? null : tranches.filter(t => {
                       const p = prices[`${s.series_number}:${t.tranche_name}`]
-                      return p?.bid != null || p?.ask != null || p?.last_trade_px != null
+                      const g = ghostPrices[`${s.series_number}:${t.tranche_name}`]
+                      return p?.bid != null || p?.ask != null || p?.last_trade_px != null || g?.bid != null || g?.ask != null
                     }).map((t, tIdx) => {
                       const rowKey   = `${s.series_number}:${t.tranche_name}`
                       const price    = prices[rowKey]
+                      const ghost    = ghostPrices[rowKey]
                       const flash    = flashRows[rowKey]
                       const isOdd    = tIdx % 2 === 1
-                      const bidColor = priceColor(price?.bid ?? null, price?.bid_dealer ?? null)
-                      const askColor = priceColor(price?.ask ?? null, price?.ask_dealer ?? null)
+                      // Ghost: last known value shown in grey when current is null
+                      const ghostBid  = price?.bid  == null ? ghost?.bid  : undefined
+                      const ghostAsk  = price?.ask  == null ? ghost?.ask  : undefined
+                      const ghostMode = ghost?.mode
+                      const bidColor  = ghostBid != null ? '#484848' : priceColor(price?.bid ?? null, price?.bid_dealer ?? null)
+                      const askColor  = ghostAsk != null ? '#484848' : priceColor(price?.ask ?? null, price?.ask_dealer ?? null)
 
                       let rowBg = isOdd ? '#0e0e0e' : '#0a0a0a'
                       if (flash === 'red')   rowBg = '#3a0000'
@@ -386,18 +415,18 @@ export default function MarketPage() {
                             CMBX.{s.series_number}.{t.tranche_name}
                           </td>
                           {layout.showSizes && (
-                            <td style={{ textAlign: 'right', padding: '3px 8px', color: price?.bid_size != null ? '#888' : '#2a2a2a' }}>
+                            <td style={{ textAlign: 'center', padding: '3px 8px', color: price?.bid_size != null ? '#888' : '#2a2a2a' }}>
                               {price?.bid_size ?? '—'}
                             </td>
                           )}
-                          <td style={{ textAlign: 'right', padding: '3px 10px', color: bidColor, borderLeft: '2px solid #1a3a1a' }}>
-                            {formatPx(price?.bid, price?.mode)}
+                          <td style={{ textAlign: 'center', padding: '3px 10px', color: bidColor, borderLeft: '2px solid #1a3a1a', fontStyle: ghostBid != null ? 'italic' : 'normal' }}>
+                            {formatPx(ghostBid != null ? ghostBid : (price?.bid ?? null), ghostBid != null ? ghostMode : price?.mode)}
                           </td>
-                          <td style={{ textAlign: 'right', padding: '3px 10px', color: askColor, borderLeft: '2px solid #3a1a1a' }}>
-                            {formatPx(price?.ask, price?.mode)}
+                          <td style={{ textAlign: 'center', padding: '3px 10px', color: askColor, borderLeft: '2px solid #3a1a1a', fontStyle: ghostAsk != null ? 'italic' : 'normal' }}>
+                            {formatPx(ghostAsk != null ? ghostAsk : (price?.ask ?? null), ghostAsk != null ? ghostMode : price?.mode)}
                           </td>
                           {layout.showSizes && (
-                            <td style={{ textAlign: 'right', padding: '3px 8px', color: price?.ask_size != null ? '#888' : '#2a2a2a' }}>
+                            <td style={{ textAlign: 'center', padding: '3px 8px', color: price?.ask_size != null ? '#888' : '#2a2a2a' }}>
                               {price?.ask_size ?? '—'}
                             </td>
                           )}

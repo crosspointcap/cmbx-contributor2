@@ -232,6 +232,12 @@ export default function BackendPage() {
   const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
   const [confirmUpfront, setConfirmUpfront] = useState('')
   const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
+  const [ghostPrices,  setGhostPrices]  = useState<Record<string, { bid?: number; ask?: number; mode?: string | null }>>({})
+  const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
+    series_number: string; tranche_name: string; mode?: string | null
+    bid?: number | null; bid_size?: string | null
+    ask?: number | null; ask_size?: string | null
+  }>>>({})
 
   function toggleCollapse(seriesNum: string) {
     setCollapsedSeries(prev => {
@@ -304,7 +310,19 @@ export default function BackendPage() {
           })
         } else {
           const p = payload.new as Price
-          setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
+          const key = `${p.series_number}:${p.tranche_name}`
+          setPrices(prev => ({ ...prev, [key]: p }))
+          // Keep ghost of last non-null bid/ask so cleared prices stay visible in grey
+          if (p.bid != null || p.ask != null) {
+            setGhostPrices(prev => ({
+              ...prev,
+              [key]: {
+                ...prev[key],
+                ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
+                ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
+              }
+            }))
+          }
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
@@ -340,8 +358,19 @@ export default function BackendPage() {
       if (tr) setBlotterTrades(tr.map(mapTrade))
       if (pd) {
         const map: Record<string, Price> = {}
-        for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
+        const ghosts: Record<string, { bid?: number; ask?: number; mode?: string | null }> = {}
+        for (const p of pd) {
+          const k = `${p.series_number}:${p.tranche_name}`
+          map[k] = p
+          if (p.bid != null || p.ask != null) {
+            ghosts[k] = {
+              ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
+              ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
+            }
+          }
+        }
         setPrices(map)
+        setGhostPrices(ghosts)
       }
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
       if (ctx) latestSpxRef.current = (ctx as { spx: number | null }).spx ?? null
@@ -482,6 +511,8 @@ export default function BackendPage() {
       last_trade_px: null, last_trade_time: null,
     }).neq('series_number', '')
     setPrices({})
+    setGhostPrices({})
+    setPulledPrices({})
     setTradeLog(null)
     setSelectedRow(null)
     setConfirmClear(false)
@@ -491,6 +522,44 @@ export default function BackendPage() {
     if (errorTimer.current) clearTimeout(errorTimer.current)
     setCellError(msg)
     errorTimer.current = setTimeout(() => { setCellError(''); errorTimer.current = null }, 3000)
+  }
+
+  // ── Dealer pull / restore ─────────────────────────────────────────────────
+  function dealerLiveCount(code: string): number {
+    return Object.values(prices).filter(p => p.bid_dealer === code || p.ask_dealer === code).length
+  }
+
+  async function pullDealerPrices(code: string) {
+    const snapshot: Array<{ series_number: string; tranche_name: string; mode?: string | null; bid?: number | null; bid_size?: string | null; ask?: number | null; ask_size?: string | null }> = []
+    for (const [key, p] of Object.entries(prices)) {
+      const hasBid = p.bid_dealer === code && p.bid != null
+      const hasAsk = p.ask_dealer === code && p.ask != null
+      if (!hasBid && !hasAsk) continue
+      const [series_number, tranche_name] = key.split(':')
+      snapshot.push({
+        series_number, tranche_name, mode: p.mode,
+        ...(hasBid ? { bid: p.bid, bid_size: p.bid_size } : {}),
+        ...(hasAsk ? { ask: p.ask, ask_size: p.ask_size } : {}),
+      })
+      const update: Record<string, unknown> = { series_number, tranche_name }
+      if (hasBid) { update.bid = null; update.bid_dealer = null; update.bid_size = null }
+      if (hasAsk) { update.ask = null; update.ask_dealer = null; update.ask_size = null }
+      await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
+    }
+    if (snapshot.length > 0) setPulledPrices(prev => ({ ...prev, [code]: snapshot }))
+  }
+
+  async function restoreDealerPrices(code: string) {
+    const snapshot = pulledPrices[code]
+    if (!snapshot?.length) return
+    for (const item of snapshot) {
+      const update: Record<string, unknown> = { series_number: item.series_number, tranche_name: item.tranche_name }
+      if (item.mode) update.mode = item.mode
+      if (item.bid != null) { update.bid = item.bid; update.bid_dealer = code; update.bid_size = item.bid_size ?? null }
+      if (item.ask != null) { update.ask = item.ask; update.ask_dealer = code; update.ask_size = item.ask_size ?? null }
+      await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
+    }
+    setPulledPrices(prev => { const n = { ...prev }; delete n[code]; return n })
   }
 
   async function executeTrade(side: 'hit' | 'lift') {
@@ -568,7 +637,7 @@ export default function BackendPage() {
             style={inputStyle}
           />
         ) : isEmpty && isHovered ? (
-          <span style={{ color: '#555', fontStyle: 'italic', fontSize: '15px' }}>type...</span>
+          <span style={{ color: '#555', fontStyle: 'italic', fontSize: '13px' }}>type...</span>
         ) : displayValue}
       </td>
     )
@@ -597,7 +666,7 @@ export default function BackendPage() {
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
         <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
-          CMBX CONTRIBUTOR — CROSSPOINT CAPITAL
+          CMBX — CROSSPOINT CAPITAL
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ color: '#444', fontSize: '15px' }}>{clock}</span>
@@ -657,21 +726,39 @@ export default function BackendPage() {
       <NavTabs active="admin" isTrader={true} />
 
       {/* Dealer buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', gap: '4px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
-        {DEALERS.map(code => (
-          <button
-            key={code}
-            onClick={() => handleDealerClick(code)}
-            style={dealerButtonStyle(code, selectedDealer === code)}
-          >
-            {code}
-          </button>
-        ))}
-        <span style={{ marginLeft: '10px', fontSize: '15px', color: selectedDealer ? '#f0c040' : '#444' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', padding: '5px 12px', gap: '4px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
+        {DEALERS.map(code => {
+          const count    = dealerLiveCount(code)
+          const isPulled = !!pulledPrices[code]?.length
+          const s        = DEALER_INACTIVE[code]
+          return (
+            <div key={code} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              <button onClick={() => handleDealerClick(code)} style={dealerButtonStyle(code, selectedDealer === code)}>
+                {code}
+              </button>
+              {isPulled ? (
+                <button
+                  onClick={() => restoreDealerPrices(code)}
+                  title={`Restore ${pulledPrices[code].length} ${code} prices`}
+                  style={{ background: '#0a1a0a', color: '#66ff88', border: '1px solid #336633', padding: '1px 5px', fontSize: '10px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '13px', whiteSpace: 'nowrap' }}
+                >↩ {pulledPrices[code].length}</button>
+              ) : count > 0 ? (
+                <button
+                  onClick={() => pullDealerPrices(code)}
+                  title={`Pull all ${count} ${code} prices`}
+                  style={{ background: 'transparent', color: s?.color + '99', border: `1px solid ${s?.border}55`, padding: '1px 5px', fontSize: '10px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '13px', whiteSpace: 'nowrap' }}
+                >↓ {count}</button>
+              ) : (
+                <span style={{ height: '15px' }} />
+              )}
+            </div>
+          )
+        })}
+        <span style={{ marginLeft: '10px', fontSize: '15px', color: selectedDealer ? '#f0c040' : '#444', alignSelf: 'center' }}>
           {selectedDealer ? `SELECTED: ${selectedDealer}` : '— no counterparty selected'}
         </span>
         {cellError && (
-          <span style={{ marginLeft: '12px', color: '#ff4444', fontSize: '15px' }}>{cellError}</span>
+          <span style={{ marginLeft: '12px', color: '#ff4444', fontSize: '15px', alignSelf: 'center' }}>{cellError}</span>
         )}
       </div>
 
@@ -763,13 +850,13 @@ export default function BackendPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
           <thead>
             <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-              <th style={{ textAlign: 'left', padding: '3px 8px 3px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
-              <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
-              <th style={{ textAlign: 'right', padding: '3px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
-              <th style={{ textAlign: 'right', padding: '3px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
-              <th style={{ textAlign: 'right', padding: '3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 700 }}>SIZE</th>
-              <th style={{ textAlign: 'right', padding: '3px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
-              <th style={{ textAlign: 'right', padding: '3px 12px 3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
+              <th style={{ textAlign: 'left',   padding: '3px 8px 3px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
+              <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
+              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
+              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
+              <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
+              <th style={{ textAlign: 'right',  padding: '3px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
+              <th style={{ textAlign: 'right',  padding: '3px 12px 3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
             </tr>
           </thead>
           <tbody>
@@ -823,31 +910,40 @@ export default function BackendPage() {
                   if (flash === 'red') rowBg = '#3a0000'
                   if (flash === 'green') rowBg = '#003a00'
 
-                  const bidTag = price?.bid_dealer && DEALER_INACTIVE[price.bid_dealer] ? DEALER_INACTIVE[price.bid_dealer] : null
-                  const askTag = price?.ask_dealer && DEALER_INACTIVE[price.ask_dealer] ? DEALER_INACTIVE[price.ask_dealer] : null
+                  const ghost   = ghostPrices[rowKey]
+                  const bidTag  = price?.bid_dealer && DEALER_INACTIVE[price.bid_dealer] ? DEALER_INACTIVE[price.bid_dealer] : null
+                  const askTag  = price?.ask_dealer && DEALER_INACTIVE[price.ask_dealer] ? DEALER_INACTIVE[price.ask_dealer] : null
+                  // Ghost: show last known value in grey when current is null
+                  const ghostBid = price?.bid == null ? ghost?.bid : undefined
+                  const ghostAsk = price?.ask == null ? ghost?.ask : undefined
+                  const ghostMode = ghost?.mode
 
                   const bidCell = (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
-                      <span style={{ color: price?.bid != null ? '#ffffff' : '#2a2a2a' }}>
-                        {formatPx(price?.bid, price?.mode)}
-                      </span>
-                      {price?.bid != null && bidTag && (
-                        <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
-                          {price.bid_dealer}
-                        </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
+                      {price?.bid != null ? (
+                        <>
+                          <span style={{ color: '#ffffff' }}>{formatPx(price.bid, price.mode)}</span>
+                          {bidTag && <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.bid_dealer}</span>}
+                        </>
+                      ) : ghostBid != null ? (
+                        <span style={{ color: '#484848', fontStyle: 'italic' }}>{formatPx(ghostBid, ghostMode)}</span>
+                      ) : (
+                        <span style={{ color: '#2a2a2a' }}>—</span>
                       )}
                     </span>
                   )
 
                   const askCell = (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', width: '100%' }}>
-                      <span style={{ color: price?.ask != null ? '#ffffff' : '#2a2a2a' }}>
-                        {formatPx(price?.ask, price?.mode)}
-                      </span>
-                      {price?.ask != null && askTag && (
-                        <span style={{ background: askTag.bg, color: askTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>
-                          {price.ask_dealer}
-                        </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
+                      {price?.ask != null ? (
+                        <>
+                          <span style={{ color: '#ffffff' }}>{formatPx(price.ask, price.mode)}</span>
+                          {askTag && <span style={{ background: askTag.bg, color: askTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.ask_dealer}</span>}
+                        </>
+                      ) : ghostAsk != null ? (
+                        <span style={{ color: '#484848', fontStyle: 'italic' }}>{formatPx(ghostAsk, ghostMode)}</span>
+                      ) : (
+                        <span style={{ color: '#2a2a2a' }}>—</span>
                       )}
                     </span>
                   )
@@ -864,10 +960,10 @@ export default function BackendPage() {
                       <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
                         CMBX.{s.series_number}.{t.tranche_name}
                       </td>
-                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'right', padding: '3px 8px' })}
-                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'right', padding: '3px 10px', borderLeft: '2px solid #1a3a1a' })}
-                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'right', padding: '3px 10px', borderLeft: '2px solid #3a1a1a' })}
-                      {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'right', padding: '3px 8px' })}
+                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '3px 8px' })}
+                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'center', padding: '3px 10px', borderLeft: '2px solid #1a3a1a' })}
+                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'center', padding: '3px 10px', borderLeft: '2px solid #3a1a1a' })}
+                      {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'center', padding: '3px 8px' })}
                       <td style={{ textAlign: 'right', padding: '3px 10px' }}>
                         {price?.last_trade_px != null ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
