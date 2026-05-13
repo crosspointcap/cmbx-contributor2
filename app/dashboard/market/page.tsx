@@ -3,6 +3,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
+import { formatPx, fmtTime as fmtTimeTz } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,13 +48,6 @@ interface SeriesConfig {
 interface TrancheConfig {
   tranche_name: string
   sort_order: number
-}
-
-function fmtTime(ts: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(new Date(ts))
 }
 
 export default function MarketPage() {
@@ -219,10 +213,10 @@ export default function MarketPage() {
                           CMBX.{s.series_number}.{t.tranche_name}
                         </td>
                         <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor }}>
-                          {price?.bid != null ? String(price.bid) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
                         </td>
                         <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor }}>
-                          {price?.ask != null ? String(price.ask) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
                         </td>
                         <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>
                           {price?.bid_size != null ? String(price.bid_size) : '—'}
@@ -231,10 +225,10 @@ export default function MarketPage() {
                           {price?.ask_size != null ? String(price.ask_size) : '—'}
                         </td>
                         <td style={{ textAlign: 'right', padding: '5px 10px', color: price?.last_trade_px != null ? '#888' : '#2a2a2a' }}>
-                          {price?.last_trade_px != null ? String(price.last_trade_px) : '—'}
+                          {price?.last_trade_px != null ? formatPx(price.last_trade_px, price.mode) : '—'}
                         </td>
                         <td style={{ textAlign: 'right', padding: '5px 12px 5px 8px', color: '#444' }}>
-                          {price?.last_trade_time ? fmtTime(price.last_trade_time) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          {price?.last_trade_time ? fmtTimeTz(price.last_trade_time) : <span style={{ color: '#2a2a2a' }}>—</span>}
                         </td>
                       </tr>
                     )
