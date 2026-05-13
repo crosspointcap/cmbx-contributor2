@@ -50,11 +50,22 @@ interface TrancheConfig {
   sort_order: number
 }
 
+interface LastTrade {
+  series: string
+  tranche: string
+  side: string
+  price: number | null
+  mode: string | null
+  size: number | string | null
+  time: string
+}
+
 export default function MarketPage() {
   const [series, setSeries] = useState<SeriesConfig[]>([])
   const [tranches, setTranches] = useState<TrancheConfig[]>([])
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
+  const [lastTrade, setLastTrade] = useState<LastTrade | null>(null)
 
   // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ─────────
   useEffect(() => {
@@ -80,14 +91,24 @@ export default function MarketPage() {
         const t = payload.new as any
         const key = `${t.series_number}:${t.tranche_name}`
         flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
+        setLastTrade({
+          series: t.series_number,
+          tranche: t.tranche_name,
+          side: t.side,
+          price: t.price ?? null,
+          mode: t.mode ?? null,
+          size: t.trade_size ?? null,
+          time: fmtTimeTz(t.created_at),
+        })
       })
       .subscribe()
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }] = await Promise.all([
+      const [{ data: sd }, { data: td }, { data: pd }, { data: tr }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
+        supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(1).single(),
       ])
       if (cancelled) return
       if (sd) setSeries(sd)
@@ -96,6 +117,17 @@ export default function MarketPage() {
         const map: Record<string, Price> = {}
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
         setPrices(map)
+      }
+      if (tr) {
+        setLastTrade({
+          series: tr.series_number,
+          tranche: tr.tranche_name,
+          side: tr.side,
+          price: tr.price ?? null,
+          mode: tr.mode ?? null,
+          size: tr.trade_size ?? null,
+          time: fmtTimeTz(tr.created_at),
+        })
       }
     }
 
@@ -238,6 +270,31 @@ export default function MarketPage() {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Trade log bar */}
+      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '13px', minHeight: '28px', display: 'flex', alignItems: 'center', gap: '8px', background: '#080808' }}>
+        {lastTrade ? (
+          <>
+            <span style={{ color: '#444' }}>[{lastTrade.time}]</span>
+            <span style={{ color: lastTrade.side === 'hit' ? '#ff6666' : '#66ff88', fontWeight: 700 }}>
+              {lastTrade.side === 'hit' ? 'HIT' : 'LIFT'}
+            </span>
+            <span style={{ color: '#666' }}>CMBX.{lastTrade.series}.{lastTrade.tranche}</span>
+            <span style={{ color: '#444' }}>@</span>
+            <span style={{ color: '#bbb', fontWeight: 600 }}>
+              {formatPx(lastTrade.price, lastTrade.mode)}
+            </span>
+            {lastTrade.size != null && (
+              <>
+                <span style={{ color: '#333' }}>▶</span>
+                <span style={{ color: '#555' }}>{lastTrade.size}MM</span>
+              </>
+            )}
+          </>
+        ) : (
+          <span style={{ color: '#2a2a2a' }}>NO TRADES TODAY</span>
+        )}
       </div>
 
       {/* Legend — dealer color key */}
