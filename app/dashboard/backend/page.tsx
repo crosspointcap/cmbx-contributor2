@@ -369,14 +369,21 @@ export default function BackendPage() {
       })
       .subscribe()
 
+    async function fetchSpx() {
+      try {
+        const res = await fetch('/api/spx')
+        const { spx } = await res.json()
+        if (spx != null) latestSpxRef.current = spx
+      } catch {}
+    }
+
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }, { data: ctx }] = await Promise.all([
+      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
         supabase.from('agent_heartbeat').select('*').limit(1).single(),
         supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(200),
-        supabase.from('market_snapshots').select('spx').order('captured_at', { ascending: false }).limit(1).single(),
       ])
       if (cancelled) return
       if (sd) {
@@ -405,12 +412,16 @@ export default function BackendPage() {
         setGhostPrices(ghosts)
       }
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
-      if (ctx) latestSpxRef.current = (ctx as { spx: number | null }).spx ?? null
     }
+
+    // Fetch SPX immediately then refresh every 5 minutes
+    fetchSpx()
+    const spxInterval = setInterval(fetchSpx, 5 * 60 * 1000)
 
     loadData()
     return () => {
       cancelled = true
+      clearInterval(spxInterval)
       supabase.removeChannel(ch)
       // Clear all pending timers on unmount
       Object.values(flashTimers.current).forEach(clearTimeout)
