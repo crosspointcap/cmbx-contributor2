@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
+import { fmt32nds, formatPx, fmtTime, fmtDate } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,33 +50,6 @@ function getStartDate(range: QuickRange): string | null {
   const d = new Date()
   d.setDate(d.getDate() - days[range])
   return d.toISOString().split('T')[0]
-}
-
-function fmt32nds(n: number): string {
-  const whole = Math.floor(n)
-  const ticks = Math.round((n - whole) * 32)
-  return `${whole}-${ticks.toString().padStart(2, '0')}`
-}
-
-function formatPx(price: number | null | undefined, mode: string | null | undefined): string {
-  if (price == null) return '—'
-  if (mode === 'ticks') return fmt32nds(price)
-  if (mode === 'price') return `$${price}`
-  return String(price)
-}
-
-function fmtTime(ts: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(new Date(ts))
-}
-
-function fmtDate(ts: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    month: 'short', day: 'numeric',
-  }).format(new Date(ts))
 }
 
 const DEALER_COLORS: Record<string, string> = {
@@ -371,6 +345,7 @@ export default function HistoryPage() {
                 const canSeeDealer  = isTrader || pc.dealer === myDealerCode
                 const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
                 const dealerColor   = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
+                const spx           = spxFor(pc.created_at, pc.spx_at_time)
                 return (
                   <tr key={pc.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
                     <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(pc.created_at)}</td>
@@ -380,11 +355,9 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size != null ? `${pc.size}MM` : '—'}</td>
-                    {(() => { const spx = spxFor(pc.created_at, pc.spx_at_time); return (
-                      <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
-                        {spx != null ? spx.toLocaleString() : '—'}
-                      </td>
-                    ) })()}
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                      {spx != null ? spx.toLocaleString() : '—'}
+                    </td>
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
                         <button
@@ -436,6 +409,7 @@ export default function HistoryPage() {
                 const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
+                const spx    = spxFor(t.created_at, t.spx_at_time)
                 return (
                   <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
                     <td style={{ padding: '3px 12px', color: '#555' }}>{fmtDate(t.created_at)}</td>
@@ -448,11 +422,9 @@ export default function HistoryPage() {
                       {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size != null ? `${t.trade_size}MM` : '—'}</td>
-                    {(() => { const spx = spxFor(t.created_at, t.spx_at_time); return (
-                      <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
-                        {spx != null ? spx.toLocaleString() : '—'}
-                      </td>
-                    ) })()}
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                      {spx != null ? spx.toLocaleString() : '—'}
+                    </td>
                   </tr>
                 )
               })}

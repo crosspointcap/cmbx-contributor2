@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import * as XLSX from 'xlsx'
+import { fmt32nds, formatPx, fmtTime, parse32nds } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -168,36 +169,6 @@ interface BlotterTrade {
   price: number | null
 }
 
-function fmtTime(ts: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(new Date(ts))
-}
-
-// 32nds: "80-01" → 80.03125,  "80-16" → 80.5,  "80-31" → 80.96875
-function parse32nds(val: string): number | null {
-  const m = val.trim().match(/^(\d+)-(\d{1,2})$/)
-  if (!m) return null
-  const whole = parseInt(m[1], 10)
-  const ticks = parseInt(m[2], 10)
-  if (ticks > 31) return null
-  return whole + ticks / 32
-}
-
-// 80.03125 → "80-01",  80.5 → "80-16"
-function fmt32nds(n: number): string {
-  const whole = Math.floor(n)
-  const ticks = Math.round((n - whole) * 32)
-  return `${whole}-${ticks.toString().padStart(2, '0')}`
-}
-
-function formatPx(price: number | null | undefined, mode: string | undefined): string {
-  if (price == null) return '—'
-  if (mode === 'ticks') return fmt32nds(price)
-  if (mode === 'price') return `$${price}`
-  return String(price)
-}
 
 const inputStyle: React.CSSProperties = {
   background: '#1a1a00',
@@ -208,11 +179,6 @@ const inputStyle: React.CSSProperties = {
   width: '55px',
   outline: 'none',
   padding: '1px 3px',
-}
-
-async function handleSignOut() {
-  await supabase.auth.signOut()
-  window.location.href = '/login'
 }
 
 function dealerButtonStyle(code: string, isSelected: boolean): React.CSSProperties {
@@ -578,7 +544,7 @@ export default function BackendPage() {
           // Pre-populate in the correct display format
           if (rawVal != null && (field === 'bid' || field === 'ask')) {
             const mode = price?.mode
-            if (mode === 'ticks')       setEditValue(fmt32nds(rawVal))
+            if (mode === 'ticks')       setEditValue(fmt32nds(rawVal as number))
             else if (mode === 'price')  setEditValue(`$${rawVal}`)
             else                        setEditValue(String(rawVal))
           } else {
@@ -655,7 +621,7 @@ export default function BackendPage() {
             MARKET
           </a>
           <button
-            onClick={handleSignOut}
+            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
             style={{
               background: 'transparent',
               color: '#555',

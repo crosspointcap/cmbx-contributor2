@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
+import { fmt32nds, formatPx, fmtTime } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -78,26 +79,6 @@ function loadLayout(): Layout {
   return { showSizes: true, showLast: true, showFeed: true }
 }
 
-function fmt32nds(n: number): string {
-  const whole = Math.floor(n)
-  const ticks = Math.round((n - whole) * 32)
-  return `${whole}-${ticks.toString().padStart(2, '0')}`
-}
-
-function formatPx(price: number | null | undefined, mode: string | null | undefined): string {
-  if (price == null) return '—'
-  if (mode === 'ticks') return fmt32nds(price)
-  if (mode === 'price') return `$${price}`
-  return String(price)
-}
-
-function fmtTime(ts: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(new Date(ts))
-}
-
 function mapTrade(t: any): BlotterEntry {
   return {
     id:             t.id,
@@ -140,6 +121,7 @@ export default function MarketPage() {
   const [blotter,         setBlotter]         = useState<BlotterEntry[]>([])
   const [layout,          setLayout]          = useState<Layout>({ showSizes: true, showLast: true, showFeed: true })
   const defaultsApplied = useRef(false)
+  const flashTimers     = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Load persisted layout on mount
   useEffect(() => { setLayout(loadLayout()) }, [])
@@ -267,24 +249,25 @@ export default function MarketPage() {
     }
 
     loadData()
-    return () => { cancelled = true; supabase.removeChannel(ch) }
+    return () => {
+      cancelled = true
+      supabase.removeChannel(ch)
+      Object.values(flashTimers.current).forEach(clearTimeout)
+      flashTimers.current = {}
+    }
   }, [authChecked])
 
   function flashRowEffect(key: string, color: 'red' | 'green') {
+    if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
     setFlashRows(prev => ({ ...prev, [key]: color }))
-    setTimeout(() => {
+    flashTimers.current[key] = setTimeout(() => {
       setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
+      delete flashTimers.current[key]
     }, 20000)
   }
 
   const myCode  = profile?.dealer_code ?? null
   const myColor = myCode ? (DEALER_COLOR[myCode] ?? '#f0c040') : '#f0c040'
-
-  if (!authChecked) return (
-    <div style={{ background: '#0a0a0a', color: '#444', fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      AUTHENTICATING...
-    </div>
-  )
 
   function priceColor(val: number | null, dealer: string | null) {
     if (val == null) return '#2a2a2a'
@@ -292,6 +275,12 @@ export default function MarketPage() {
     if (myCode === 'MS' && dealer !== myCode) return '#ff6666'   // MS only: competitors in red
     return '#ffffff'                                             // all others → white
   }
+
+  if (!authChecked) return (
+    <div style={{ background: '#0a0a0a', color: '#444', fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      AUTHENTICATING...
+    </div>
+  )
 
   // Number of visible columns (used for series header colSpan)
   const colCount = 3 + (layout.showSizes ? 2 : 0) + (layout.showLast ? 1 : 0)
