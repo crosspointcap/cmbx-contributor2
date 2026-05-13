@@ -23,8 +23,8 @@ export interface Price {
   tranche_name: string
   bid: number | null
   ask: number | null
-  bid_size: number | null
-  ask_size: number | null
+  bid_size: string | null
+  ask_size: string | null
   bid_dealer: string | null
   ask_dealer: string | null
   mode: string

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { fmt32nds, formatPx, fmtTime } from '../../../lib/utils'
+import { fmt32nds, formatPx, fmtTime, buildGhostMap, mergeGhost, GhostMap } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -120,7 +120,7 @@ export default function MarketPage() {
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set())
   const [blotter,         setBlotter]         = useState<BlotterEntry[]>([])
   const [layout,          setLayout]          = useState<Layout>({ showSizes: true, showLast: true, showFeed: true })
-  const [ghostPrices,     setGhostPrices]     = useState<Record<string, { bid?: number; ask?: number; mode?: string | null }>>({})
+  const [ghostPrices,     setGhostPrices]     = useState<GhostMap>({})
   const defaultsApplied = useRef(false)
   const flashTimers     = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
@@ -191,16 +191,7 @@ export default function MarketPage() {
           const p = payload.new as Price
           const key = `${p.series_number}:${p.tranche_name}`
           setPrices(prev => ({ ...prev, [key]: p }))
-          if (p.bid != null || p.ask != null) {
-            setGhostPrices(prev => ({
-              ...prev,
-              [key]: {
-                ...prev[key],
-                ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
-                ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
-              }
-            }))
-          }
+          setGhostPrices(prev => mergeGhost(prev, key, p))
           // Auto-expand series when a live price arrives
           if (p.bid != null || p.ask != null || p.last_trade_px != null) {
             setCollapsedSeries(prev => {
@@ -250,20 +241,8 @@ export default function MarketPage() {
         }
         if (td) setTranches(td)
         if (pd) {
-          const map: Record<string, Price> = {}
-          const ghosts: Record<string, { bid?: number; ask?: number; mode?: string | null }> = {}
-          for (const p of pd) {
-            const k = `${p.series_number}:${p.tranche_name}`
-            map[k] = p
-            if (p.bid != null || p.ask != null) {
-              ghosts[k] = {
-                ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
-                ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
-              }
-            }
-          }
-          setPrices(map)
-          setGhostPrices(ghosts)
+          setPrices(Object.fromEntries(pd.map((p: Price) => [`${p.series_number}:${p.tranche_name}`, p])))
+          setGhostPrices(buildGhostMap(pd))
         }
         if (tr) setBlotter(tr.map(mapTrade))
       } catch (err) {

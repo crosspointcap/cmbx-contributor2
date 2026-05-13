@@ -1,5 +1,41 @@
 // Shared formatting utilities used across dashboard pages
 
+// Ghost prices: last known non-null bid/ask per row, shown in grey when live price is cleared
+export type GhostMap = Record<string, { bid?: number; ask?: number; mode?: string | null }>
+
+/** Build a GhostMap from an initial array of price rows. */
+export function buildGhostMap(
+  prices: Array<{ series_number: string; tranche_name: string; bid: number | null; ask: number | null; mode?: string | null }>
+): GhostMap {
+  const ghosts: GhostMap = {}
+  for (const p of prices) {
+    if (p.bid == null && p.ask == null) continue
+    const k = `${p.series_number}:${p.tranche_name}`
+    ghosts[k] = {
+      ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
+      ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
+    }
+  }
+  return ghosts
+}
+
+/** Merge a realtime price update into an existing GhostMap. Returns prev unchanged if nothing to ghost. */
+export function mergeGhost(
+  prev: GhostMap,
+  key: string,
+  p: { bid: number | null; ask: number | null; mode?: string | null }
+): GhostMap {
+  if (p.bid == null && p.ask == null) return prev
+  return {
+    ...prev,
+    [key]: {
+      ...prev[key],
+      ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
+      ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
+    },
+  }
+}
+
 export function fmt32nds(n: number): string {
   const whole = Math.floor(n)
   const ticks = Math.round((n - whole) * 32)

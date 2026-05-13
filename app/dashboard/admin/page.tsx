@@ -4,19 +4,11 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SeriesConfig, TrancheConfig, Dealer, Trade } from '@/lib/types'
+import { fmtTime } from '../../../lib/utils'
 
 type Tab = 'SERIES' | 'TRANCHES' | 'DEALERS' | 'BLOTTER'
 
-function formatTime(ts: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(ts))
-}
-
+// Full date+time stamp for the blotter (different format from utils fmtDate which is date-only)
 function formatDate(ts: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -1037,7 +1029,7 @@ export default function AdminPage() {
                         <span className="text-[#66ff88]">
                           ✓{' '}
                           {trade.bbg_publish_time
-                            ? formatTime(trade.bbg_publish_time)
+                            ? fmtTime(trade.bbg_publish_time)
                             : ''}
                         </span>
                       ) : (

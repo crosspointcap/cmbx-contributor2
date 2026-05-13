@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import * as XLSX from 'xlsx'
-import { fmt32nds, formatPx, fmtTime, parse32nds } from '../../../lib/utils'
+import { fmt32nds, formatPx, fmtTime, parse32nds, buildGhostMap, mergeGhost, GhostMap } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -264,7 +264,7 @@ export default function BackendPage() {
   const [bulkTranche,   setBulkTranche]   = useState('BBB-')
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
-  const [ghostPrices,  setGhostPrices]  = useState<Record<string, { bid?: number; ask?: number; mode?: string | null }>>({})
+  const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
     series_number: string; tranche_name: string; mode?: string | null
     bid?: number | null; bid_size?: string | null
@@ -345,16 +345,7 @@ export default function BackendPage() {
           const key = `${p.series_number}:${p.tranche_name}`
           setPrices(prev => ({ ...prev, [key]: p }))
           // Keep ghost of last non-null bid/ask so cleared prices stay visible in grey
-          if (p.bid != null || p.ask != null) {
-            setGhostPrices(prev => ({
-              ...prev,
-              [key]: {
-                ...prev[key],
-                ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
-                ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
-              }
-            }))
-          }
+          setGhostPrices(prev => mergeGhost(prev, key, p))
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
@@ -396,20 +387,8 @@ export default function BackendPage() {
       if (td) setTranches(td)
       if (tr) setBlotterTrades(tr.map(mapTrade))
       if (pd) {
-        const map: Record<string, Price> = {}
-        const ghosts: Record<string, { bid?: number; ask?: number; mode?: string | null }> = {}
-        for (const p of pd) {
-          const k = `${p.series_number}:${p.tranche_name}`
-          map[k] = p
-          if (p.bid != null || p.ask != null) {
-            ghosts[k] = {
-              ...(p.bid != null ? { bid: p.bid, mode: p.mode } : {}),
-              ...(p.ask != null ? { ask: p.ask, mode: p.mode } : {}),
-            }
-          }
-        }
-        setPrices(map)
-        setGhostPrices(ghosts)
+        setPrices(Object.fromEntries(pd.map((p: Price) => [`${p.series_number}:${p.tranche_name}`, p])))
+        setGhostPrices(buildGhostMap(pd))
       }
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
     }
