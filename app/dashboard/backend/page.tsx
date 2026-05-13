@@ -169,6 +169,12 @@ interface BlotterTrade {
   price: number | null
 }
 
+interface PresenceUser {
+  dealer_code: string
+  page: string
+  online_at: string
+}
+
 
 const inputStyle: React.CSSProperties = {
   background: '#1a1a00',
@@ -204,17 +210,31 @@ function mapTrade(t: any): BlotterTrade {
   }
 }
 
-// Parse pasted bulk price text.
-// Format per line: "84-24/85-24 -15"  (BID/ASK SERIES)
-// Series suffix can be "-15" or "15".  Supports 32nds, dollar, or spread.
+// Parse pasted bulk price text. Supports two formats:
+//   Format A (SERIES BID/ASK): "-19 92-12/93-00"   ← primary format
+//   Format B (BID/ASK SERIES): "84-24/85-24 -15"   ← legacy format
+// Series can be positive or negative (abs value used). Supports 32nds, dollar, or spread.
 function parseBulkLines(text: string): Array<{ series: string; bid: number; ask: number; mode: string }> {
   const results: Array<{ series: string; bid: number; ask: number; mode: string }> = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (!line) continue
-    const m = line.match(/^(\S+)\/(\S+)\s+(-?\d+)$/)
-    if (!m) continue
-    const [, bidStr, askStr, seriesPart] = m
+
+    let bidStr: string, askStr: string, seriesPart: string
+
+    // Format A: SERIES BID/ASK  e.g. "-19 92-12/93-00"
+    const mA = line.match(/^(-?\d+)\s+(\S+)\/(\S+)$/)
+    // Format B: BID/ASK SERIES  e.g. "84-24/85-24 -15"
+    const mB = line.match(/^(\S+)\/(\S+)\s+(-?\d+)$/)
+
+    if (mA) {
+      [, seriesPart, bidStr, askStr] = mA
+    } else if (mB) {
+      [, bidStr, askStr, seriesPart] = mB
+    } else {
+      continue
+    }
+
     const seriesNum = Math.abs(parseInt(seriesPart, 10))
     if (!seriesNum || isNaN(seriesNum)) continue
     const mode = /^\d+-\d{1,2}$/.test(bidStr) ? 'ticks'
@@ -265,9 +285,7 @@ export default function BackendPage() {
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
-  const [cdxDisplay,   setCdxDisplay]   = useState<{ hy: number | null; ig: number | null }>({ hy: null, ig: null })
-  const [cdxHyInput,   setCdxHyInput]   = useState('')
-  const [cdxIgInput,   setCdxIgInput]   = useState('')
+  const [onlineUsers,  setOnlineUsers]  = useState<PresenceUser[]>([])
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
     series_number: string; tranche_name: string; mode?: string | null
     bid?: number | null; bid_size?: string | null
@@ -320,6 +338,27 @@ export default function BackendPage() {
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [])
+
+  // ── Presence: WHO'S ONLINE ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!authChecked) return
+    const ch = supabase.channel('platform-presence')
+    ch
+      .on('presence', { event: 'sync' }, () => {
+        const state = ch.presenceState<PresenceUser>()
+        const users: PresenceUser[] = []
+        for (const presences of Object.values(state)) {
+          for (const p of presences as PresenceUser[]) users.push(p)
+        }
+        setOnlineUsers(users)
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await ch.track({ dealer_code: 'ADMIN', page: 'admin', online_at: new Date().toISOString() })
+        }
+      })
+    return () => { supabase.removeChannel(ch) }
+  }, [authChecked])
 
   // Persistent broadcast channel — wait for SUBSCRIBED before storing ref
   useEffect(() => {
@@ -376,10 +415,7 @@ export default function BackendPage() {
       try {
         const res = await fetch('/api/cdx')
         const { cdx_hy, cdx_ig } = await res.json()
-        const hy = cdx_hy ?? null
-        const ig = cdx_ig ?? null
-        latestCdxRef.current = { hy, ig }
-        if (hy != null || ig != null) setCdxDisplay({ hy, ig })
+        latestCdxRef.current = { hy: cdx_hy ?? null, ig: cdx_ig ?? null }
       } catch {}
     }
 
@@ -556,24 +592,6 @@ export default function BackendPage() {
     setTradeLog(null)
     setSelectedRow(null)
     setConfirmClear(false)
-  }
-
-  async function pushCdx() {
-    const hy = parseFloat(cdxHyInput.trim()) || null
-    const ig = parseFloat(cdxIgInput.trim()) || null
-    const today = new Date().toISOString().split('T')[0]
-    try {
-      const { data: existing } = await supabase.from('market_context').select('date').eq('date', today).maybeSingle()
-      if (existing) {
-        await supabase.from('market_context').update({ cdx_hy_spread: hy, cdx_ig_spread: ig }).eq('date', today)
-      } else {
-        await supabase.from('market_context').insert({ date: today, cdx_hy_spread: hy, cdx_ig_spread: ig })
-      }
-      latestCdxRef.current = { hy, ig }
-      setCdxDisplay({ hy, ig })
-    } catch (err) {
-      showError('CDX push failed')
-    }
   }
 
   function showError(msg: string) {
@@ -813,6 +831,35 @@ export default function BackendPage() {
       {/* Nav tabs */}
       <NavTabs active="admin" isTrader={true} />
 
+      {/* WHO'S ONLINE */}
+      {onlineUsers.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#060606', flexWrap: 'wrap' }}>
+          <span style={{ color: '#333', fontSize: '11px', fontFamily: 'Courier New, monospace', marginRight: '2px', letterSpacing: '1px' }}>ONLINE</span>
+          {onlineUsers.map((u, i) => {
+            const s = DEALER_INACTIVE[u.dealer_code]
+            const elapsedSec = Math.floor((Date.now() - new Date(u.online_at).getTime()) / 1000)
+            const elapsedStr = elapsedSec < 60 ? `${elapsedSec}s` : elapsedSec < 3600 ? `${Math.floor(elapsedSec / 60)}m` : `${Math.floor(elapsedSec / 3600)}h`
+            return (
+              <span key={i} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                background: s?.bg ?? '#181818',
+                color: s?.color ?? '#888',
+                border: `1px solid ${s?.border ?? '#333'}`,
+                padding: '1px 7px',
+                fontSize: '11px',
+                borderRadius: '2px',
+                fontFamily: 'Courier New, monospace',
+                whiteSpace: 'nowrap',
+              }}>
+                <span style={{ fontWeight: 700 }}>{u.dealer_code}</span>
+                <span style={{ color: s ? s.color + 'aa' : '#555', fontSize: '10px' }}>{u.page.toUpperCase()}</span>
+                <span style={{ color: s ? s.color + '66' : '#444', fontSize: '10px' }}>{elapsedStr}</span>
+              </span>
+            )
+          })}
+        </div>
+      )}
+
       {/* Dealer + action — single combined row */}
       <div style={{ display: 'flex', alignItems: 'flex-end', padding: '3px 10px', gap: '3px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
 
@@ -880,38 +927,6 @@ export default function BackendPage() {
             <span style={{ color: '#ff4444', fontSize: '10px' }}>clear?</span>
             <button onClick={clearAllPrices} style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700 }}>YES</button>
             <button onClick={() => setConfirmClear(false)} style={{ background: '#111', color: '#555', border: '1px solid #222', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer' }}>NO</button>
-          </span>
-        )}
-      </div>
-
-      {/* CDX manual entry strip */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, background: '#060606' }}>
-        <span style={{ color: '#444', fontSize: '10px', letterSpacing: '1px' }}>CDX</span>
-        <span style={{ color: '#555', fontSize: '10px' }}>HY</span>
-        <input
-          value={cdxHyInput}
-          onChange={e => setCdxHyInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && pushCdx()}
-          placeholder={cdxDisplay.hy != null ? String(Math.round(cdxDisplay.hy)) : '—'}
-          style={{ background: '#111', color: '#ff8844', border: '1px solid #2a2a2a', fontFamily: 'Courier New, monospace', fontSize: '11px', padding: '1px 5px', width: '48px', outline: 'none' }}
-        />
-        <span style={{ color: '#555', fontSize: '10px' }}>IG</span>
-        <input
-          value={cdxIgInput}
-          onChange={e => setCdxIgInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && pushCdx()}
-          placeholder={cdxDisplay.ig != null ? String(Math.round(cdxDisplay.ig)) : '—'}
-          style={{ background: '#111', color: '#88ccaa', border: '1px solid #2a2a2a', fontFamily: 'Courier New, monospace', fontSize: '11px', padding: '1px 5px', width: '48px', outline: 'none' }}
-        />
-        <button onClick={pushCdx}
-          style={{ background: 'transparent', color: '#555', border: '1px solid #2a2a2a', padding: '1px 8px', fontSize: '10px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}>
-          PUSH
-        </button>
-        {cdxDisplay.hy != null && (
-          <span style={{ color: '#333', fontSize: '10px', marginLeft: '4px' }}>
-            HY <span style={{ color: '#ff8844' }}>{Math.round(cdxDisplay.hy)}</span>
-            <span style={{ margin: '0 4px' }}>·</span>
-            IG <span style={{ color: '#88ccaa' }}>{cdxDisplay.ig != null ? Math.round(cdxDisplay.ig) : '—'}</span>
           </span>
         )}
       </div>
@@ -1030,7 +1045,9 @@ export default function BackendPage() {
                       style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
                     >
                       <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
-                        CMBX.{s.series_number}.{t.tranche_name}
+                        {t.tranche_name === 'BBB-'
+                          ? `BBB-.${s.series_number}`
+                          : `CMBX.${s.series_number}.${t.tranche_name}`}
                       </td>
                       {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '3px 8px' })}
                       {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'center', padding: '3px 10px', borderLeft: '2px solid #1a3a1a' })}
@@ -1175,8 +1192,8 @@ export default function BackendPage() {
 
             {/* Format hint */}
             <div style={{ color: '#444', fontSize: '11px', marginBottom: '8px', lineHeight: '1.5' }}>
-              One line per series — <span style={{ color: '#666' }}>BID/ASK SERIES</span><br />
-              e.g. <span style={{ color: '#888' }}>84-24/85-24 -15</span> &nbsp;·&nbsp; <span style={{ color: '#888' }}>285/295 -14</span> &nbsp;·&nbsp; <span style={{ color: '#888' }}>$83.50/$84.50 -13</span>
+              One line per series — <span style={{ color: '#666' }}>SERIES BID/ASK</span><br />
+              e.g. <span style={{ color: '#888' }}>-19 92-12/93-00</span> &nbsp;·&nbsp; <span style={{ color: '#888' }}>-14 285/295</span> &nbsp;·&nbsp; <span style={{ color: '#888' }}>-13 $83.50/$84.50</span>
             </div>
 
             {/* Textarea */}
@@ -1206,7 +1223,9 @@ export default function BackendPage() {
                   <tbody>
                     {parsedBulk.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                        <td style={{ padding: '3px 10px', color: '#888' }}>CMBX.{r.series}.{bulkTranche}</td>
+                        <td style={{ padding: '3px 10px', color: '#888' }}>
+                          {bulkTranche === 'BBB-' ? `BBB-.${r.series}` : `CMBX.${r.series}.${bulkTranche}`}
+                        </td>
                         <td style={{ padding: '3px 10px', color: '#66ff88', textAlign: 'center', fontWeight: 700 }}>{formatPx(r.bid, r.mode)}</td>
                         <td style={{ padding: '3px 4px', color: '#444', textAlign: 'center' }}>/</td>
                         <td style={{ padding: '3px 10px', color: '#ff8888', textAlign: 'center', fontWeight: 700 }}>{formatPx(r.ask, r.mode)}</td>

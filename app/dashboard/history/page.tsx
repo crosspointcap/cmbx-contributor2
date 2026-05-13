@@ -91,6 +91,18 @@ export default function HistoryPage() {
     })
   }, [])
 
+  // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ──────────
+  useEffect(() => {
+    const dealerCode = myDealerCode ?? 'ANON'
+    const ch = supabase.channel('platform-presence')
+    ch.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await ch.track({ dealer_code: dealerCode, page: 'history', online_at: new Date().toISOString() })
+      }
+    })
+    return () => { supabase.removeChannel(ch) }
+  }, [myDealerCode])
+
   // ── Realtime: stream new entries live ────────────────────────────────────────
   useEffect(() => {
     const ch = supabase
@@ -233,12 +245,18 @@ export default function HistoryPage() {
 
   const filteredPriceChanges = useMemo(() => {
     if (!q) return priceChanges
-    return priceChanges.filter(pc =>
-      `cmbx.${pc.series_number}.${pc.tranche_name}`.toLowerCase().includes(q) ||
-      (pc.dealer ?? '').toLowerCase().includes(q) ||
-      pc.tranche_name.toLowerCase().includes(q)
-    )
-  }, [priceChanges, q])
+    return priceChanges.filter(pc => {
+      // Only allow dealer-name searching if this user can actually see that dealer
+      const canSeeDealer = isTrader || pc.dealer === myDealerCode
+      return (
+        `cmbx.${pc.series_number}.${pc.tranche_name}`.toLowerCase().includes(q) ||
+        pc.tranche_name.toLowerCase().includes(q) ||
+        pc.series_number.toLowerCase().includes(q) ||
+        pc.side.toLowerCase().includes(q) ||
+        (canSeeDealer && (pc.dealer ?? '').toLowerCase().includes(q))
+      )
+    })
+  }, [priceChanges, q, isTrader, myDealerCode])
 
   const filteredTrades = useMemo(() => {
     // Dealers only see trades they were a party to
@@ -246,10 +264,21 @@ export default function HistoryPage() {
       ? trades.filter(t => t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
       : trades
     if (!q) return list
-    return list.filter(t =>
-      `cmbx.${t.series_number}.${t.tranche_name}`.toLowerCase().includes(q) ||
-      t.tranche_name.toLowerCase().includes(q)
-    )
+    return list.filter(t => {
+      const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
+      const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
+      // Traders can search by buyer/seller names; dealers can search their own counterparty
+      const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
+      return (
+        `cmbx.${t.series_number}.${t.tranche_name}`.toLowerCase().includes(q) ||
+        t.tranche_name.toLowerCase().includes(q) ||
+        t.series_number.toLowerCase().includes(q) ||
+        t.side.toLowerCase().includes(q) ||
+        (isTrader && (buyer ?? '').toLowerCase().includes(q)) ||
+        (isTrader && (seller ?? '').toLowerCase().includes(q)) ||
+        (!isTrader && (cpty ?? '').toLowerCase().includes(q))
+      )
+    })
   }, [trades, q, isTrader, myDealerCode])
 
   return (
@@ -385,10 +414,10 @@ export default function HistoryPage() {
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : '#2a2a2a' }}>
-                      {cdxHy != null ? Math.round(cdxHy) : '—'}
+                      {cdxHy != null ? cdxHy.toFixed(2) : '—'}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : '#2a2a2a' }}>
-                      {cdxIg != null ? Math.round(cdxIg) : '—'}
+                      {cdxIg != null ? cdxIg.toFixed(2) : '—'}
                     </td>
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
@@ -462,10 +491,10 @@ export default function HistoryPage() {
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : '#2a2a2a' }}>
-                      {cdxHy != null ? Math.round(cdxHy) : '—'}
+                      {cdxHy != null ? cdxHy.toFixed(2) : '—'}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : '#2a2a2a' }}>
-                      {cdxIg != null ? Math.round(cdxIg) : '—'}
+                      {cdxIg != null ? cdxIg.toFixed(2) : '—'}
                     </td>
                   </tr>
                 )
