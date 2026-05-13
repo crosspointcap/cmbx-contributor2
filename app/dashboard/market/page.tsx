@@ -8,7 +8,20 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const VIEW_AS_OPTIONS = ['MARKET', 'MS', 'BOA', 'JPM', 'GS', 'CITI', 'UBS', 'BNP']
+// Each dealer's bid/ask shows in their signature color (fingerprinting)
+const DEALER_COLORS: Record<string, string> = {
+  MS:   '#ff8888',
+  BOA:  '#88ff88',
+  CITI: '#cc88ff',
+  JPM:  '#5aafff',
+  GS:   '#ffcc44',
+  UBS:  '#ff88cc',
+  BNP:  '#8888ff',
+  DB:   '#88ccff',
+  BARC: '#ffaa66',
+}
+
+const DEALERS_ORDERED = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
 
 interface Price {
   series_number: string
@@ -43,32 +56,21 @@ function fmtTime(ts: string) {
 }
 
 export default function MarketPage() {
-  const [viewAs, setViewAs] = useState<string>('MARKET')
   const [series, setSeries] = useState<SeriesConfig[]>([])
   const [tranches, setTranches] = useState<TrancheConfig[]>([])
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
-
-  useEffect(() => {
-    const saved = localStorage.getItem('cmbx_view_as')
-    if (saved) setViewAs(saved)
-  }, [])
 
   // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ─────────
   useEffect(() => {
     const ch = supabase.channel('platform-presence')
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await ch.track({ dealer_code: viewAs, page: 'market', online_at: new Date().toISOString() })
+        await ch.track({ dealer_code: 'MARKET', page: 'market', online_at: new Date().toISOString() })
       }
     })
     return () => { supabase.removeChannel(ch) }
-  }, [viewAs])
-
-  function handleViewAs(val: string) {
-    setViewAs(val)
-    localStorage.setItem('cmbx_view_as', val)
-  }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -122,8 +124,6 @@ export default function MarketPage() {
     }, 250)
   }
 
-  const myCode = viewAs === 'MARKET' ? null : viewAs
-
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '14px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -132,43 +132,21 @@ export default function MarketPage() {
         <span style={{ color: '#f0c040', fontSize: '14px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX MARKET — CROSSPOINT CAPITAL
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ color: '#444', fontSize: '13px' }}>VIEW AS:</span>
-          <select
-            value={viewAs}
-            onChange={e => handleViewAs(e.target.value)}
-            style={{
-              background: '#111',
-              border: '1px solid #333',
-              color: viewAs === 'MARKET' ? '#555' : '#f0c040',
-              fontFamily: 'Courier New, monospace',
-              fontSize: '13px',
-              padding: '3px 8px',
-              outline: 'none',
-              cursor: 'pointer',
-              borderRadius: '2px',
-            }}
-          >
-            {VIEW_AS_OPTIONS.map(opt => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
-          <button
-            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-            style={{
-              background: 'transparent',
-              color: '#555',
-              border: '1px solid #2a2a2a',
-              padding: '2px 8px',
-              fontSize: '13px',
-              fontFamily: 'Courier New, monospace',
-              cursor: 'pointer',
-              borderRadius: '2px',
-            }}
-          >
-            SIGN OUT
-          </button>
-        </div>
+        <button
+          onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
+          style={{
+            background: 'transparent',
+            color: '#555',
+            border: '1px solid #2a2a2a',
+            padding: '2px 8px',
+            fontSize: '13px',
+            fontFamily: 'Courier New, monospace',
+            cursor: 'pointer',
+            borderRadius: '2px',
+          }}
+        >
+          SIGN OUT
+        </button>
       </div>
 
       {/* Grid */}
@@ -220,11 +198,12 @@ export default function MarketPage() {
                     if (flash === 'red') rowBg = '#3a0000'
                     if (flash === 'green') rowBg = '#003a00'
 
+                    // Fingerprint: each dealer's price shown in their signature color
                     const bidColor = price?.bid != null
-                      ? (myCode && price.bid_dealer === myCode ? '#4488ff' : '#66ff88')
+                      ? (DEALER_COLORS[price.bid_dealer ?? ''] ?? '#66ff88')
                       : '#2a2a2a'
                     const askColor = price?.ask != null
-                      ? (myCode && price.ask_dealer === myCode ? '#4488ff' : '#ff6666')
+                      ? (DEALER_COLORS[price.ask_dealer ?? ''] ?? '#ff6666')
                       : '#2a2a2a'
 
                     return (
@@ -263,20 +242,14 @@ export default function MarketPage() {
         </table>
       </div>
 
-      {/* Legend */}
-      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '16px', background: '#080808' }}>
-        <span style={{ color: '#333' }}>
-          <span style={{ color: '#66ff88' }}>■</span> BID
-        </span>
-        <span style={{ color: '#333' }}>
-          <span style={{ color: '#ff6666' }}>■</span> ASK
-        </span>
-        <span style={{ color: '#333' }}>
-          <span style={{ color: '#4488ff' }}>■</span> YOUR PRICE
-        </span>
-        <span style={{ color: '#333' }}>
-          <span style={{ color: '#66ff88' }}>●</span> LIVE
-        </span>
+      {/* Legend — dealer color key */}
+      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '14px', background: '#080808', flexWrap: 'wrap' }}>
+        {DEALERS_ORDERED.map(d => (
+          <span key={d} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ color: DEALER_COLORS[d], fontSize: '10px' }}>■</span>
+            <span style={{ color: '#333' }}>{d}</span>
+          </span>
+        ))}
       </div>
     </div>
   )
