@@ -3,7 +3,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { formatPx, fmtTime as fmtTimeTz } from '../../../lib/utils'
+import { formatPx, fmtTime } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,14 +50,17 @@ interface TrancheConfig {
   sort_order: number
 }
 
-interface LastTrade {
-  series: string
-  tranche: string
+interface TradeEntry {
+  id: string
+  created_at: string
+  series_number: string
+  tranche_name: string
   side: string
   price: number | null
   mode: string | null
-  size: number | string | null
-  time: string
+  trade_size: number | string | null
+  dealer: string | null
+  passive_dealer: string | null
 }
 
 export default function MarketPage() {
@@ -65,19 +68,30 @@ export default function MarketPage() {
   const [tranches, setTranches] = useState<TrancheConfig[]>([])
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
-  const [lastTrade, setLastTrade] = useState<LastTrade | null>(null)
+  const [trades, setTrades] = useState<TradeEntry[]>([])
+  const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
+
+  // ── Soft auth check — get dealer identity if logged in ────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('profiles').select('dealer_code').eq('id', session.user.id).single()
+        .then(({ data }) => { if (data?.dealer_code) setMyDealerCode(data.dealer_code) })
+    })
+  }, [])
 
   // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ─────────
   useEffect(() => {
     const ch = supabase.channel('platform-presence')
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await ch.track({ dealer_code: 'MARKET', page: 'market', online_at: new Date().toISOString() })
+        await ch.track({ dealer_code: myDealerCode ?? 'MARKET', page: 'market', online_at: new Date().toISOString() })
       }
     })
     return () => { supabase.removeChannel(ch) }
-  }, [])
+  }, [myDealerCode])
 
+  // ── Main data channel ─────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
 
@@ -91,15 +105,18 @@ export default function MarketPage() {
         const t = payload.new as any
         const key = `${t.series_number}:${t.tranche_name}`
         flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
-        setLastTrade({
-          series: t.series_number,
-          tranche: t.tranche_name,
+        setTrades(prev => [{
+          id: t.id,
+          created_at: t.created_at,
+          series_number: t.series_number,
+          tranche_name: t.tranche_name,
           side: t.side,
           price: t.price ?? null,
           mode: t.mode ?? null,
-          size: t.trade_size ?? null,
-          time: fmtTimeTz(t.created_at),
-        })
+          trade_size: t.trade_size ?? null,
+          dealer: t.dealer ?? null,
+          passive_dealer: t.passive_dealer ?? null,
+        }, ...prev])
       })
       .subscribe()
 
@@ -108,7 +125,7 @@ export default function MarketPage() {
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
-        supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(100),
       ])
       if (cancelled) return
       if (sd) setSeries(sd)
@@ -118,17 +135,7 @@ export default function MarketPage() {
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
         setPrices(map)
       }
-      if (tr) {
-        setLastTrade({
-          series: tr.series_number,
-          tranche: tr.tranche_name,
-          side: tr.side,
-          price: tr.price ?? null,
-          mode: tr.mode ?? null,
-          size: tr.trade_size ?? null,
-          time: fmtTimeTz(tr.created_at),
-        })
-      }
+      if (tr) setTrades(tr)
     }
 
     loadData()
@@ -179,122 +186,153 @@ export default function MarketPage() {
       {/* Nav tabs — dealers see MARKET + HISTORY only, no ADMIN */}
       <NavTabs active="market" isTrader={false} />
 
-      {/* Grid */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-          <thead>
-            <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-              <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1e1e1e', width: '130px', fontWeight: 400 }}>TRANCHE</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>BID</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>ASK</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>B.SZ</th>
-              <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>A.SZ</th>
-              <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>LAST PX</th>
-              <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '80px', fontWeight: 400 }}>TIME</th>
-            </tr>
-          </thead>
-          <tbody>
-            {series.map(s => {
-              const visibleTranches = tranches.filter(t => {
-                const p = prices[`${s.series_number}:${t.tranche_name}`]
-                return p?.bid != null || p?.ask != null || p?.last_trade_px != null
-              })
-              if (visibleTranches.length === 0) return null
-              return (
-                <Fragment key={s.series_number}>
-                  <tr>
-                    <td
-                      colSpan={7}
-                      style={{
-                        padding: '7px 12px 4px',
-                        color: '#f0c040',
-                        background: '#0e0e0e',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        letterSpacing: '1px',
-                        borderBottom: '1px solid #1e1e1e',
-                        borderTop: '1px solid #1a1a1a',
-                      }}
-                    >
-                      CMBX.{s.series_number}
-                    </td>
-                  </tr>
-                  {visibleTranches.map(t => {
-                    const rowKey = `${s.series_number}:${t.tranche_name}`
-                    const price = prices[rowKey]
-                    const flash = flashRows[rowKey]
+      {/* Main content: price grid (left) + trade history (right) */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-                    let rowBg = 'transparent'
-                    if (flash === 'red') rowBg = '#3a0000'
-                    if (flash === 'green') rowBg = '#003a00'
-
-                    // Fingerprint: each dealer's price shown in their signature color
-                    const bidColor = price?.bid != null
-                      ? (DEALER_COLORS[price.bid_dealer ?? ''] ?? '#66ff88')
-                      : '#2a2a2a'
-                    const askColor = price?.ask != null
-                      ? (DEALER_COLORS[price.ask_dealer ?? ''] ?? '#ff6666')
-                      : '#2a2a2a'
-
-                    return (
-                      <tr
-                        key={rowKey}
-                        style={{ background: rowBg, borderBottom: '1px solid #1e1e1e' }}
+        {/* Price grid */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+                <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1e1e1e', width: '130px', fontWeight: 400 }}>TRANCHE</th>
+                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>BID</th>
+                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>ASK</th>
+                <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>B.SZ</th>
+                <th style={{ textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>A.SZ</th>
+                <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>LAST PX</th>
+                <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '80px', fontWeight: 400 }}>TIME</th>
+              </tr>
+            </thead>
+            <tbody>
+              {series.map(s => {
+                const visibleTranches = tranches.filter(t => {
+                  const p = prices[`${s.series_number}:${t.tranche_name}`]
+                  return p?.bid != null || p?.ask != null || p?.last_trade_px != null
+                })
+                if (visibleTranches.length === 0) return null
+                return (
+                  <Fragment key={s.series_number}>
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          padding: '7px 12px 4px',
+                          color: '#f0c040',
+                          background: '#0e0e0e',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          letterSpacing: '1px',
+                          borderBottom: '1px solid #1e1e1e',
+                          borderTop: '1px solid #1a1a1a',
+                        }}
                       >
-                        <td style={{ padding: '5px 6px 5px 10px', color: '#ffffff', whiteSpace: 'nowrap', width: '130px' }}>
-                          CMBX.{s.series_number}.{t.tranche_name}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor }}>
-                          {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor }}>
-                          {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>
-                          {price?.bid_size != null ? String(price.bid_size) : '—'}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>
-                          {price?.ask_size != null ? String(price.ask_size) : '—'}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '5px 10px', color: price?.last_trade_px != null ? '#888' : '#2a2a2a' }}>
-                          {price?.last_trade_px != null ? formatPx(price.last_trade_px, price.mode) : '—'}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '5px 12px 5px 8px', color: '#444' }}>
-                          {price?.last_trade_time ? fmtTimeTz(price.last_trade_time) : <span style={{ color: '#2a2a2a' }}>—</span>}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </Fragment>
+                        CMBX.{s.series_number}
+                      </td>
+                    </tr>
+                    {visibleTranches.map(t => {
+                      const rowKey = `${s.series_number}:${t.tranche_name}`
+                      const price = prices[rowKey]
+                      const flash = flashRows[rowKey]
+
+                      let rowBg = 'transparent'
+                      if (flash === 'red') rowBg = '#3a0000'
+                      if (flash === 'green') rowBg = '#003a00'
+
+                      // Fingerprint: each dealer's price shown in their signature color
+                      const bidColor = price?.bid != null
+                        ? (DEALER_COLORS[price.bid_dealer ?? ''] ?? '#66ff88')
+                        : '#2a2a2a'
+                      const askColor = price?.ask != null
+                        ? (DEALER_COLORS[price.ask_dealer ?? ''] ?? '#ff6666')
+                        : '#2a2a2a'
+
+                      return (
+                        <tr
+                          key={rowKey}
+                          style={{ background: rowBg, borderBottom: '1px solid #1e1e1e' }}
+                        >
+                          <td style={{ padding: '5px 6px 5px 10px', color: '#ffffff', whiteSpace: 'nowrap', width: '130px' }}>
+                            CMBX.{s.series_number}.{t.tranche_name}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor }}>
+                            {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor }}>
+                            {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>
+                            {price?.bid_size != null ? String(price.bid_size) : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>
+                            {price?.ask_size != null ? String(price.ask_size) : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 10px', color: price?.last_trade_px != null ? '#888' : '#2a2a2a' }}>
+                            {price?.last_trade_px != null ? formatPx(price.last_trade_px, price.mode) : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '5px 12px 5px 8px', color: '#444' }}>
+                            {price?.last_trade_time ? fmtTime(price.last_trade_time) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Trade history — right panel */}
+        <div style={{ width: '260px', borderLeft: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#080808' }}>
+          <div style={{ padding: '5px 10px', borderBottom: '1px solid #1e1e1e', color: '#444', fontSize: '11px', letterSpacing: '2px', flexShrink: 0 }}>
+            TRADE HISTORY
+          </div>
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            {trades.length === 0 ? (
+              <div style={{ padding: '12px 10px', color: '#2a2a2a', fontSize: '12px' }}>NO TRADES TODAY</div>
+            ) : trades.map(t => {
+              const isInvolved = myDealerCode != null &&
+                (t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
+              const sideColor = t.side === 'hit' ? '#ff6666' : '#66ff88'
+              return (
+                <div
+                  key={t.id}
+                  style={{
+                    padding: '5px 10px',
+                    borderBottom: '1px solid #111',
+                    fontSize: '12px',
+                    background: isInvolved ? '#0d0d00' : 'transparent',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#333', fontSize: '11px' }}>{fmtTime(t.created_at)}</span>
+                    <span style={{ color: sideColor, fontWeight: 700, fontSize: '11px' }}>
+                      {t.side === 'hit' ? 'HIT' : 'LIFT'}
+                    </span>
+                    {isInvolved && (
+                      <span style={{ color: '#f0c040', fontSize: '10px', fontWeight: 700 }}>YOU</span>
+                    )}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '12px', marginTop: '1px' }}>
+                    CMBX.{t.series_number}.{t.tranche_name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                    <span style={{ color: '#888', fontWeight: 600 }}>{formatPx(t.price, t.mode)}</span>
+                    {t.trade_size != null && (
+                      <span style={{ color: '#444', fontSize: '11px' }}>· {t.trade_size}MM</span>
+                    )}
+                  </div>
+                  {isInvolved && myDealerCode && (
+                    <div style={{ color: '#f0c040', fontSize: '10px', marginTop: '1px', opacity: 0.7 }}>
+                      {myDealerCode}
+                    </div>
+                  )}
+                </div>
               )
             })}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </div>
 
-      {/* Trade log bar */}
-      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '13px', minHeight: '28px', display: 'flex', alignItems: 'center', gap: '8px', background: '#080808' }}>
-        {lastTrade ? (
-          <>
-            <span style={{ color: '#444' }}>[{lastTrade.time}]</span>
-            <span style={{ color: lastTrade.side === 'hit' ? '#ff6666' : '#66ff88', fontWeight: 700 }}>
-              {lastTrade.side === 'hit' ? 'HIT' : 'LIFT'}
-            </span>
-            <span style={{ color: '#666' }}>CMBX.{lastTrade.series}.{lastTrade.tranche}</span>
-            <span style={{ color: '#444' }}>@</span>
-            <span style={{ color: '#bbb', fontWeight: 600 }}>
-              {formatPx(lastTrade.price, lastTrade.mode)}
-            </span>
-            {lastTrade.size != null && (
-              <>
-                <span style={{ color: '#333' }}>▶</span>
-                <span style={{ color: '#555' }}>{lastTrade.size}MM</span>
-              </>
-            )}
-          </>
-        ) : (
-          <span style={{ color: '#2a2a2a' }}>NO TRADES TODAY</span>
-        )}
       </div>
 
       {/* Legend — dealer color key */}
