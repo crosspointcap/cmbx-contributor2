@@ -46,6 +46,15 @@ export function formatPx(price: number | null | undefined, mode: string | null |
   if (price == null) return '—'
   if (mode === 'ticks') return fmt32nds(price)
   if (mode === 'price') return `$${price}`
+  // Fallback: if mode is missing and the fractional part is a clean 32nds multiple,
+  // display as ticks so old DB rows without mode don't show raw decimals
+  if (mode == null || mode === '') {
+    const frac = price - Math.floor(price)
+    if (frac > 0) {
+      const ticks = frac * 32
+      if (Math.abs(ticks - Math.round(ticks)) < 0.0001) return fmt32nds(price)
+    }
+  }
   return String(price)
 }
 

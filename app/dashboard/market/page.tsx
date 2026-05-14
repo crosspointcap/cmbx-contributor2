@@ -49,6 +49,30 @@ interface TradeEntry {
   passive_dealer: string | null
 }
 
+// Color each dealer sees for THEIR OWN prices
+const MY_COLOR: Record<string, string> = {
+  MS:   '#4488ff',  // blue  (as specified)
+  BOA:  '#88ff88',  // green
+  CITI: '#cc88ff',  // purple
+  JPM:  '#44ddff',  // cyan
+  GS:   '#ffcc44',  // gold
+  UBS:  '#ff88cc',  // pink
+  BNP:  '#9999ff',  // indigo
+  DB:   '#66ccff',  // sky
+  BARC: '#ffaa66',  // orange
+}
+// MS sees ALL other dealers' prices in red; everyone else sees them in white
+const MS_OTHERS_COLOR = '#ff5555'
+
+function priceColor(priceDealer: string | null, myDealer: string | null, hasPrice: boolean): string {
+  if (!hasPrice) return '#2a2a2a'
+  if (!priceDealer) return '#ffffff'                          // unattributed → white
+  if (priceDealer === myDealer) return MY_COLOR[myDealer ?? ''] ?? '#f0c040'  // YOUR price
+  if (myDealer === 'MS') return MS_OTHERS_COLOR               // MS sees others red
+  if (!myDealer) return '#ffffff'                             // not logged in → white
+  return '#ffffff'                                            // all others see white
+}
+
 type ColKey = 'bid' | 'ask' | 'bsz' | 'asz' | 'lastpx' | 'time'
 
 const ALL_COLS: { key: ColKey; label: string }[] = [
@@ -282,13 +306,8 @@ export default function MarketPage() {
                       if (flash === 'red') rowBg = '#3a0000'
                       if (flash === 'green') rowBg = '#003a00'
 
-                      // Dealers only see their OWN prices highlighted — no other bank info visible
-                      const bidColor = price?.bid != null
-                        ? (myDealerCode && price.bid_dealer === myDealerCode ? '#f0c040' : '#66ff88')
-                        : '#2a2a2a'
-                      const askColor = price?.ask != null
-                        ? (myDealerCode && price.ask_dealer === myDealerCode ? '#f0c040' : '#ff6666')
-                        : '#2a2a2a'
+                      const bidColor = priceColor(price?.bid_dealer ?? null, myDealerCode, price?.bid != null)
+                      const askColor = priceColor(price?.ask_dealer ?? null, myDealerCode, price?.ask != null)
 
                       return (
                         <tr
@@ -393,9 +412,9 @@ export default function MarketPage() {
 
       {/* Legend */}
       <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '16px', background: '#080808' }}>
-        <span style={{ color: '#333' }}><span style={{ color: '#66ff88' }}>■</span> BID</span>
-        <span style={{ color: '#333' }}><span style={{ color: '#ff6666' }}>■</span> ASK</span>
-        {myDealerCode && <span style={{ color: '#555' }}><span style={{ color: '#f0c040' }}>■</span> YOUR PRICE</span>}
+        <span style={{ color: '#333' }}><span style={{ color: '#ffffff' }}>■</span> MARKET</span>
+        {myDealerCode === 'MS' && <span style={{ color: '#333' }}><span style={{ color: MS_OTHERS_COLOR }}>■</span> OTHER</span>}
+        {myDealerCode && <span style={{ color: '#555' }}><span style={{ color: MY_COLOR[myDealerCode] ?? '#f0c040' }}>■</span> YOUR PRICE</span>}
       </div>
     </div>
   )

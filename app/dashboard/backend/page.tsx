@@ -238,12 +238,15 @@ function parseBulkLines(text: string): Array<{ series: string; bid: number; ask:
 
     const seriesNum = Math.abs(parseInt(seriesPart, 10))
     if (!seriesNum || isNaN(seriesNum)) continue
-    const mode = /^\d+-\d{1,2}$/.test(bidStr) ? 'ticks'
-               : bidStr.startsWith('$')        ? 'price'
-               :                                 'spread'
-    const parsePx = (s: string) =>
-      mode === 'ticks' ? parse32nds(s.replace('$', ''))
-                       : (parseFloat(s.replace('$', '')) || null)
+    // Strip leading $ before testing for 32nds so "$81-12" is handled correctly
+    const bidRaw = bidStr.replace(/^\$/, '')
+    const mode = /^\d+-\d{1,2}$/.test(bidRaw) ? 'ticks'
+               : bidStr.startsWith('$')         ? 'price'
+               :                                  'spread'
+    const parsePx = (s: string) => {
+      const raw = s.replace(/^\$/, '')
+      return mode === 'ticks' ? parse32nds(raw) : (parseFloat(raw) || null)
+    }
     const bid = parsePx(bidStr)
     const ask = parsePx(askStr)
     if (bid == null || ask == null) continue
