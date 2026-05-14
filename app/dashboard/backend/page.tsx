@@ -12,6 +12,7 @@ const supabase = createClient(
 )
 
 const DEALERS = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
+const VIEW_AS_OPTIONS = ['ALL', ...DEALERS]
 
 const DEFAULT_SIZE: Record<string, number> = {
   AAA:   25,
@@ -286,6 +287,7 @@ export default function BackendPage() {
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
   const [onlineUsers,  setOnlineUsers]  = useState<PresenceUser[]>([])
+  const [viewAs,       setViewAs]       = useState<string>('ALL')
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
     series_number: string; tranche_name: string; mode?: string | null
     bid?: number | null; bid_size?: string | null
@@ -337,6 +339,11 @@ export default function BackendPage() {
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('cmbx_admin_view_as')
+    if (saved && VIEW_AS_OPTIONS.includes(saved)) setViewAs(saved)
   }, [])
 
   // ── Presence: WHO'S ONLINE ────────────────────────────────────────────────
@@ -792,6 +799,24 @@ export default function BackendPage() {
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: agentOnline ? '#66ff88' : '#444', display: 'inline-block', flexShrink: 0 }} />
             <span style={{ color: '#555', fontSize: '13px' }}>AGENT</span>
           </span>
+          <span style={{ color: '#333', fontSize: '12px' }}>VIEW AS</span>
+          <select
+            value={viewAs}
+            onChange={e => { setViewAs(e.target.value); localStorage.setItem('cmbx_admin_view_as', e.target.value) }}
+            style={{
+              background: '#111',
+              border: '1px solid #333',
+              color: viewAs === 'ALL' ? '#555' : '#f0c040',
+              fontFamily: 'Courier New, monospace',
+              fontSize: '13px',
+              padding: '2px 6px',
+              outline: 'none',
+              cursor: 'pointer',
+              borderRadius: '2px',
+            }}
+          >
+            {VIEW_AS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
           <a href="/dashboard/market" style={{ color: '#555', fontSize: '15px', border: '1px solid #2a2a2a', padding: '2px 8px', textDecoration: 'none', borderRadius: '2px' }}>
             MARKET
           </a>
@@ -993,7 +1018,10 @@ export default function BackendPage() {
                   const flash = flashRows[rowKey]
                   const isOdd = tIdx % 2 === 1
 
-                  let rowBg = isActive ? '#1a1500' : isOdd ? '#0d0d0d' : 'transparent'
+                  const viewingDealer = viewAs !== 'ALL' ? viewAs : null
+                  const rowHasViewed  = viewingDealer && (price?.bid_dealer === viewingDealer || price?.ask_dealer === viewingDealer)
+
+                  let rowBg = isActive ? '#1a1500' : rowHasViewed ? '#0e0e00' : isOdd ? '#0d0d0d' : 'transparent'
                   if (flash === 'red') rowBg = '#3a0000'
                   if (flash === 'green') rowBg = '#003a00'
 
@@ -1005,11 +1033,14 @@ export default function BackendPage() {
                   const ghostAsk = price?.ask == null ? ghost?.ask : undefined
                   const ghostMode = ghost?.mode
 
+                  const isBidViewed = viewingDealer != null && price?.bid_dealer === viewingDealer
+                  const isAskViewed = viewingDealer != null && price?.ask_dealer === viewingDealer
+
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
                       {price?.bid != null ? (
                         <>
-                          <span style={{ color: '#ffffff' }}>{formatPx(price.bid, price.mode)}</span>
+                          <span style={{ color: isBidViewed ? '#f0c040' : '#ffffff', fontWeight: isBidViewed ? 700 : 400 }}>{formatPx(price.bid, price.mode)}</span>
                           {bidTag && <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.bid_dealer}</span>}
                         </>
                       ) : ghostBid != null ? (
@@ -1024,7 +1055,7 @@ export default function BackendPage() {
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
                       {price?.ask != null ? (
                         <>
-                          <span style={{ color: '#ffffff' }}>{formatPx(price.ask, price.mode)}</span>
+                          <span style={{ color: isAskViewed ? '#f0c040' : '#ffffff', fontWeight: isAskViewed ? 700 : 400 }}>{formatPx(price.ask, price.mode)}</span>
                           {askTag && <span style={{ background: askTag.bg, color: askTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.ask_dealer}</span>}
                         </>
                       ) : ghostAsk != null ? (

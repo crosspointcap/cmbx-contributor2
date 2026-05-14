@@ -10,20 +10,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Each dealer's bid/ask shows in their signature color (fingerprinting)
-const DEALER_COLORS: Record<string, string> = {
-  MS:   '#ff8888',
-  BOA:  '#88ff88',
-  CITI: '#cc88ff',
-  JPM:  '#5aafff',
-  GS:   '#ffcc44',
-  UBS:  '#ff88cc',
-  BNP:  '#8888ff',
-  DB:   '#88ccff',
-  BARC: '#ffaa66',
-}
-
-const DEALERS_ORDERED = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
 
 interface Price {
   series_number: string
@@ -296,12 +282,12 @@ export default function MarketPage() {
                       if (flash === 'red') rowBg = '#3a0000'
                       if (flash === 'green') rowBg = '#003a00'
 
-                      // Fingerprint: each dealer's price shown in their signature color
+                      // Dealers only see their OWN prices highlighted — no other bank info visible
                       const bidColor = price?.bid != null
-                        ? (DEALER_COLORS[price.bid_dealer ?? ''] ?? '#66ff88')
+                        ? (myDealerCode && price.bid_dealer === myDealerCode ? '#f0c040' : '#66ff88')
                         : '#2a2a2a'
                       const askColor = price?.ask != null
-                        ? (DEALER_COLORS[price.ask_dealer ?? ''] ?? '#ff6666')
+                        ? (myDealerCode && price.ask_dealer === myDealerCode ? '#f0c040' : '#ff6666')
                         : '#2a2a2a'
 
                       return (
@@ -405,14 +391,11 @@ export default function MarketPage() {
 
       </div>
 
-      {/* Legend — dealer color key */}
-      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '14px', background: '#080808', flexWrap: 'wrap' }}>
-        {DEALERS_ORDERED.map(d => (
-          <span key={d} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ color: DEALER_COLORS[d], fontSize: '10px' }}>■</span>
-            <span style={{ color: '#333' }}>{d}</span>
-          </span>
-        ))}
+      {/* Legend */}
+      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '16px', background: '#080808' }}>
+        <span style={{ color: '#333' }}><span style={{ color: '#66ff88' }}>■</span> BID</span>
+        <span style={{ color: '#333' }}><span style={{ color: '#ff6666' }}>■</span> ASK</span>
+        {myDealerCode && <span style={{ color: '#555' }}><span style={{ color: '#f0c040' }}>■</span> YOUR PRICE</span>}
       </div>
     </div>
   )
