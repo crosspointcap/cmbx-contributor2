@@ -3,7 +3,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { formatPx, fmtTime } from '../../../lib/utils'
+import { formatPx, fmtTime } from '../../../lib/utils' // fmtTime used for last_trade_time column
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,19 +34,6 @@ interface SeriesConfig {
 interface TrancheConfig {
   tranche_name: string
   sort_order: number
-}
-
-interface TradeEntry {
-  id: string
-  created_at: string
-  series_number: string
-  tranche_name: string
-  side: string
-  price: number | null
-  mode: string | null
-  trade_size: number | string | null
-  dealer: string | null
-  passive_dealer: string | null
 }
 
 // Color each dealer sees for THEIR OWN prices
@@ -89,7 +76,6 @@ export default function MarketPage() {
   const [tranches, setTranches] = useState<TrancheConfig[]>([])
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
-  const [trades, setTrades] = useState<TradeEntry[]>([])
   const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
   const [hiddenCols, setHiddenCols] = useState<Set<ColKey>>(new Set())
 
@@ -145,27 +131,14 @@ export default function MarketPage() {
         const t = payload.new as any
         const key = `${t.series_number}:${t.tranche_name}`
         flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
-        setTrades(prev => [{
-          id: t.id,
-          created_at: t.created_at,
-          series_number: t.series_number,
-          tranche_name: t.tranche_name,
-          side: t.side,
-          price: t.price ?? null,
-          mode: t.mode ?? null,
-          trade_size: t.trade_size ?? null,
-          dealer: t.dealer ?? null,
-          passive_dealer: t.passive_dealer ?? null,
-        }, ...prev])
       })
       .subscribe()
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }, { data: tr }] = await Promise.all([
+      const [{ data: sd }, { data: td }, { data: pd }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
-        supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(100),
       ])
       if (cancelled) return
       if (sd) setSeries(sd)
@@ -175,7 +148,6 @@ export default function MarketPage() {
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
         setPrices(map)
       }
-      if (tr) setTrades(tr)
     }
 
     loadData()
@@ -356,57 +328,6 @@ export default function MarketPage() {
               })}
             </tbody>
           </table>
-        </div>
-
-        {/* Trade history — right panel */}
-        <div style={{ width: '260px', borderLeft: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#080808' }}>
-          <div style={{ padding: '5px 10px', borderBottom: '1px solid #1e1e1e', color: '#444', fontSize: '11px', letterSpacing: '2px', flexShrink: 0 }}>
-            TRADE HISTORY
-          </div>
-          <div style={{ flex: 1, overflow: 'auto' }}>
-            {trades.length === 0 ? (
-              <div style={{ padding: '12px 10px', color: '#2a2a2a', fontSize: '12px' }}>NO TRADES TODAY</div>
-            ) : trades.map(t => {
-              const isInvolved = myDealerCode != null &&
-                (t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
-              const sideColor = t.side === 'hit' ? '#ff6666' : '#66ff88'
-              return (
-                <div
-                  key={t.id}
-                  style={{
-                    padding: '5px 10px',
-                    borderBottom: '1px solid #111',
-                    fontSize: '12px',
-                    background: isInvolved ? '#0d0d00' : 'transparent',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                    <span style={{ color: '#333', fontSize: '11px' }}>{fmtTime(t.created_at)}</span>
-                    <span style={{ color: sideColor, fontWeight: 700, fontSize: '11px' }}>
-                      {t.side === 'hit' ? 'HIT' : 'LIFT'}
-                    </span>
-                    {isInvolved && (
-                      <span style={{ color: '#f0c040', fontSize: '10px', fontWeight: 700 }}>YOU</span>
-                    )}
-                  </div>
-                  <div style={{ color: '#666', fontSize: '12px', marginTop: '1px' }}>
-                    {t.tranche_name}.{t.series_number}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
-                    <span style={{ color: '#888', fontWeight: 600 }}>{formatPx(t.price, t.mode)}</span>
-                    {t.trade_size != null && (
-                      <span style={{ color: '#444', fontSize: '11px' }}>· {t.trade_size}MM</span>
-                    )}
-                  </div>
-                  {isInvolved && myDealerCode && (
-                    <div style={{ color: '#f0c040', fontSize: '10px', marginTop: '1px', opacity: 0.7 }}>
-                      {myDealerCode}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
         </div>
 
       </div>
