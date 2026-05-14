@@ -310,7 +310,6 @@ export default function BackendPage() {
   const selectedRowRef      = useRef(selectedRow)
   const blotterBroadcastRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const latestSpxRef        = useRef<number | null>(null)
-  const latestCdxRef        = useRef<{ hy: number | null; ig: number | null }>({ hy: null, ig: null })
   selectedDealerRef.current = selectedDealer
   selectedRowRef.current    = selectedRow
 
@@ -421,14 +420,6 @@ export default function BackendPage() {
       } catch {}
     }
 
-    async function fetchCdx() {
-      try {
-        const res = await fetch('/api/cdx')
-        const { cdx_hy, cdx_ig } = await res.json()
-        latestCdxRef.current = { hy: cdx_hy ?? null, ig: cdx_ig ?? null }
-      } catch {}
-    }
-
     async function loadData() {
       const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
@@ -454,17 +445,14 @@ export default function BackendPage() {
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
     }
 
-    // Fetch SPX and CDX immediately, then refresh every 5 minutes
+    // Fetch SPX immediately, then refresh every 5 minutes
     fetchSpx()
-    fetchCdx()
     const spxInterval = setInterval(fetchSpx, 5 * 60 * 1000)
-    const cdxInterval = setInterval(fetchCdx, 5 * 60 * 1000)
 
     loadData()
     return () => {
       cancelled = true
       clearInterval(spxInterval)
-      clearInterval(cdxInterval)
       supabase.removeChannel(ch)
       // Clear all pending timers on unmount
       Object.values(flashTimers.current).forEach(clearTimeout)

@@ -41,8 +41,7 @@ interface TradeRow {
 
 interface DailyClose {
   date: string
-  spx_close:     number | null
-  cdx_hy_spread: number | null
+  spx_close:    number | null
   cdx_ig_spread: number | null
 }
 
@@ -179,7 +178,7 @@ export default function HistoryPage() {
 
       let ctxQ = supabase
         .from('market_context')
-        .select('date, spx_close, cdx_hy_spread, cdx_ig_spread')
+        .select('date, spx_close, cdx_ig_spread')
         .order('date', { ascending: true })
         .limit(400)
 
@@ -235,12 +234,6 @@ export default function HistoryPage() {
     return map
   }, [dailyCloses])
 
-  const cdxHyByDate = useMemo(() => {
-    const map: Record<string, number | null> = {}
-    for (const c of dailyCloses) map[c.date] = c.cdx_hy_spread
-    return map
-  }, [dailyCloses])
-
   const cdxIgByDate = useMemo(() => {
     const map: Record<string, number | null> = {}
     for (const c of dailyCloses) map[c.date] = c.cdx_ig_spread
@@ -250,10 +243,6 @@ export default function HistoryPage() {
   function spxFor(ts: string, spx_at_time: number | null): number | null {
     if (spx_at_time != null) return spx_at_time
     return spxByDate[ts.split('T')[0]] ?? null
-  }
-
-  function cdxHyFor(ts: string): number | null {
-    return cdxHyByDate[ts.split('T')[0]] ?? null
   }
 
   function cdxIgFor(ts: string): number | null {
@@ -400,14 +389,13 @@ export default function HistoryPage() {
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SPREAD</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SZ</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #ff8844', fontWeight: 700 }}>CDX HY</th>
                 <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #88ccaa', fontWeight: 700 }}>CDX IG</th>
                 {isTrader && <th style={{ padding: '4px 8px', borderBottom: '1px solid #1a1a1a' }} />}
               </tr>
             </thead>
             <tbody>
               {filteredPriceChanges.length === 0 ? (
-                <tr><td colSpan={isTrader ? 11 : 10} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 10 : 9} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no price activity for selected range'}
                 </td></tr>
               ) : filteredPriceChanges.map((pc, i) => {
@@ -415,7 +403,6 @@ export default function HistoryPage() {
                 const visibleDealer = showDealer ? (pc.dealer ?? '—') : '—'
                 const dealerColor   = showDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
                 const spx   = spxFor(pc.created_at, pc.spx_at_time)
-                const cdxHy = cdxHyFor(pc.created_at)
                 const cdxIg = cdxIgFor(pc.created_at)
                 return (
                   <tr key={pc.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
@@ -428,9 +415,6 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size ?? '—'}</td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : '#2a2a2a' }}>
-                      {cdxHy != null ? cdxHy.toFixed(2) : '—'}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : '#2a2a2a' }}>
                       {cdxIg != null ? cdxIg.toFixed(2) : '—'}
@@ -470,13 +454,12 @@ export default function HistoryPage() {
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SZ</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #ff8844', fontWeight: 700 }}>CDX HY</th>
                 <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #88ccaa', fontWeight: 700 }}>CDX IG</th>
               </tr>
             </thead>
             <tbody>
               {filteredTrades.length === 0 ? (
-                <tr><td colSpan={isTrader ? 10 : 9} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 9 : 8} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
                 </td></tr>
               ) : filteredTrades.map((t, i) => {
@@ -486,7 +469,6 @@ export default function HistoryPage() {
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
                 const spx   = spxFor(t.created_at, t.spx_at_time)
-                const cdxHy = cdxHyFor(t.created_at)
                 const cdxIg = cdxIgFor(t.created_at)
                 return (
                   <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
@@ -502,9 +484,6 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size ?? '—'}</td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : '#2a2a2a' }}>
-                      {cdxHy != null ? cdxHy.toFixed(2) : '—'}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : '#2a2a2a' }}>
                       {cdxIg != null ? cdxIg.toFixed(2) : '—'}

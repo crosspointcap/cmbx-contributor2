@@ -226,9 +226,9 @@ export default function MarketPage() {
       {/* Nav tabs — dealers see MARKET + HISTORY only, no ADMIN */}
       <NavTabs active="market" isTrader={false} />
 
-      {/* Column visibility toggles */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#060606' }}>
-        <span style={{ color: '#2a2a2a', fontSize: '11px', marginRight: '2px', letterSpacing: '1px' }}>COLS</span>
+      {/* Column visibility toggles — always visible so columns can be restored */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderBottom: '1px solid #161616', flexShrink: 0, background: '#060606' }}>
+        <span style={{ color: '#282828', fontSize: '10px', marginRight: '2px', letterSpacing: '1px' }}>COLS</span>
         {ALL_COLS.map(col => {
           const hidden = hiddenCols.has(col.key)
           return (
@@ -236,10 +236,10 @@ export default function MarketPage() {
               key={col.key}
               onClick={() => toggleCol(col.key)}
               style={{
-                background: hidden ? 'transparent' : '#1a1a1a',
-                color: hidden ? '#2a2a2a' : '#666',
-                border: `1px solid ${hidden ? '#1a1a1a' : '#333'}`,
-                padding: '1px 7px',
+                background: 'transparent',
+                color: hidden ? '#1e1e1e' : '#383838',
+                border: `1px solid ${hidden ? '#181818' : '#2a2a2a'}`,
+                padding: '1px 6px',
                 fontSize: '10px',
                 fontFamily: 'Courier New, monospace',
                 cursor: 'pointer',
@@ -261,13 +261,13 @@ export default function MarketPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-                <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1e1e1e', width: '130px', fontWeight: 400 }}>TRANCHE</th>
-                {!hiddenCols.has('bid')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>BID</th>}
-                {!hiddenCols.has('ask')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>ASK</th>}
-                {!hiddenCols.has('bsz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>B.SZ</th>}
-                {!hiddenCols.has('asz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '60px', fontWeight: 400 }}>A.SZ</th>}
-                {!hiddenCols.has('lastpx') && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '70px', fontWeight: 400 }}>LAST PX</th>}
-                {!hiddenCols.has('time')   && <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '80px', fontWeight: 400 }}>TIME</th>}
+                <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1a1a1a', width: '88px', fontWeight: 400, color: '#333' }}>TRANCHE</th>
+                {!hiddenCols.has('bid')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>BID</th>}
+                {!hiddenCols.has('ask')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>ASK</th>}
+                {!hiddenCols.has('bsz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1a1a1a', minWidth: '50px', fontWeight: 400, color: '#333' }}>B.SZ</th>}
+                {!hiddenCols.has('asz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1a1a1a', minWidth: '50px', fontWeight: 400, color: '#333' }}>A.SZ</th>}
+                {!hiddenCols.has('lastpx') && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>LAST PX</th>}
+                {!hiddenCols.has('time')   && <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>TIME</th>}
               </tr>
             </thead>
             <tbody>
@@ -284,14 +284,15 @@ export default function MarketPage() {
                       <td
                         colSpan={visibleColCount}
                         style={{
-                          padding: '7px 12px 4px',
+                          padding: '4px 10px 3px 8px',
                           color: '#f0c040',
-                          background: '#0e0e0e',
-                          fontSize: '13px',
+                          background: '#0b0b0b',
+                          fontSize: '11px',
                           fontWeight: 600,
-                          letterSpacing: '1px',
-                          borderBottom: '1px solid #1e1e1e',
-                          borderTop: '1px solid #1a1a1a',
+                          letterSpacing: '2px',
+                          borderBottom: '1px solid #161616',
+                          borderTop: '2px solid #1c1500',
+                          borderLeft: '2px solid #3a2a00',
                         }}
                       >
                         CMBX.{s.series_number}
@@ -314,7 +315,7 @@ export default function MarketPage() {
                           key={rowKey}
                           style={{ background: rowBg, borderBottom: '1px solid #1e1e1e' }}
                         >
-                          <td style={{ padding: '5px 6px 5px 10px', color: '#ffffff', whiteSpace: 'nowrap', width: '130px' }}>
+                          <td style={{ padding: '5px 6px 5px 10px', color: '#cccccc', whiteSpace: 'nowrap', width: '88px', fontSize: '12px' }}>
                             {t.tranche_name}.{s.series_number}
                           </td>
                           {!hiddenCols.has('bid') && (
@@ -328,12 +329,12 @@ export default function MarketPage() {
                             </td>
                           )}
                           {!hiddenCols.has('bsz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#4a6a8a' : '#1e1e1e', fontSize: '12px' }}>
                               {price?.bid_size != null ? String(price.bid_size) : '—'}
                             </td>
                           )}
                           {!hiddenCols.has('asz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? '#4a6a8a' : '#1e1e1e', fontSize: '12px' }}>
                               {price?.ask_size != null ? String(price.ask_size) : '—'}
                             </td>
                           )}
