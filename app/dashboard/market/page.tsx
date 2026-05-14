@@ -315,7 +315,7 @@ export default function MarketPage() {
                           style={{ background: rowBg, borderBottom: '1px solid #1e1e1e' }}
                         >
                           <td style={{ padding: '5px 6px 5px 10px', color: '#ffffff', whiteSpace: 'nowrap', width: '130px' }}>
-                            CMBX.{s.series_number}.{t.tranche_name}
+                            {t.tranche_name}.{s.series_number}
                           </td>
                           {!hiddenCols.has('bid') && (
                             <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor }}>
@@ -389,7 +389,7 @@ export default function MarketPage() {
                     )}
                   </div>
                   <div style={{ color: '#666', fontSize: '12px', marginTop: '1px' }}>
-                    CMBX.{t.series_number}.{t.tranche_name}
+                    {t.tranche_name}.{t.series_number}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
                     <span style={{ color: '#888', fontWeight: 600 }}>{formatPx(t.price, t.mode)}</span>

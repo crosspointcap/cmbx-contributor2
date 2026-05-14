@@ -1079,9 +1079,7 @@ export default function BackendPage() {
                       style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
                     >
                       <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
-                        {t.tranche_name === 'BBB-'
-                          ? `BBB-.${s.series_number}`
-                          : `CMBX.${s.series_number}.${t.tranche_name}`}
+                        {`${t.tranche_name}.${s.series_number}`}
                       </td>
                       {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '3px 8px' })}
                       {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'center', padding: '3px 10px', borderLeft: '2px solid #1a3a1a' })}

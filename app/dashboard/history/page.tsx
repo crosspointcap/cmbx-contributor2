@@ -59,6 +59,26 @@ const DEALER_COLORS: Record<string, string> = {
   GS: '#ffcc44', UBS: '#ff88cc', BNP: '#8888ff', DB: '#88ccff', BARC: '#ffaa66',
 }
 
+// ─── ACCESS CONTROL RULES ────────────────────────────────────────────────────
+// Traders (isTrader=true): see everything — all dealer names, all trades, full blotter
+// Dealers (isTrader=false, myDealerCode set): see their own prices + names; other dealer
+//   names are hidden (shown as "—"). In the trade log, only trades they were party to
+//   appear; they can see the counterparty name only on their own trades.
+// Unauthenticated visitors: same as dealers with myDealerCode=null — all names hidden,
+//   trade log shows all trades but without any dealer names.
+//
+// Helper: should this viewer be allowed to see a specific dealer name?
+function canViewDealerName(priceDealer: string | null, myDealerCode: string | null, isTrader: boolean): boolean {
+  return isTrader || priceDealer === myDealerCode
+}
+// Helper: should this viewer see this trade at all?
+function canViewTrade(t: { dealer: string | null; passive_dealer: string | null }, myDealerCode: string | null, isTrader: boolean): boolean {
+  if (isTrader) return true
+  if (!myDealerCode) return false  // unauthenticated: hide all trade names/details
+  return t.dealer === myDealerCode || t.passive_dealer === myDealerCode
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const DATE_INPUT_STYLE: React.CSSProperties = {
   background: '#111', color: '#aaa', padding: '1px 6px',
   fontSize: '11px', fontFamily: 'Courier New, monospace',
@@ -246,31 +266,27 @@ export default function HistoryPage() {
   const filteredPriceChanges = useMemo(() => {
     if (!q) return priceChanges
     return priceChanges.filter(pc => {
-      // Only allow dealer-name searching if this user can actually see that dealer
-      const canSeeDealer = isTrader || pc.dealer === myDealerCode
+      const showDealer = canViewDealerName(pc.dealer, myDealerCode, isTrader)
       return (
-        `cmbx.${pc.series_number}.${pc.tranche_name}`.toLowerCase().includes(q) ||
+        `${pc.tranche_name}.${pc.series_number}`.toLowerCase().includes(q) ||
         pc.tranche_name.toLowerCase().includes(q) ||
         pc.series_number.toLowerCase().includes(q) ||
         pc.side.toLowerCase().includes(q) ||
-        (canSeeDealer && (pc.dealer ?? '').toLowerCase().includes(q))
+        (showDealer && (pc.dealer ?? '').toLowerCase().includes(q))
       )
     })
   }, [priceChanges, q, isTrader, myDealerCode])
 
   const filteredTrades = useMemo(() => {
-    // Dealers only see trades they were a party to
-    let list = (!isTrader && myDealerCode)
-      ? trades.filter(t => t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
-      : trades
-    if (!q) return list
-    return list.filter(t => {
-      const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
+    // Apply access control: dealers only see their own trades
+    const visible = trades.filter(t => canViewTrade(t, myDealerCode, isTrader))
+    if (!q) return visible
+    return visible.filter(t => {
+      const buyer = t.side === 'lift' ? t.dealer : t.passive_dealer
       const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
-      // Traders can search by buyer/seller names; dealers can search their own counterparty
-      const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
+      const cpty  = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
       return (
-        `cmbx.${t.series_number}.${t.tranche_name}`.toLowerCase().includes(q) ||
+        `${t.tranche_name}.${t.series_number}`.toLowerCase().includes(q) ||
         t.tranche_name.toLowerCase().includes(q) ||
         t.series_number.toLowerCase().includes(q) ||
         t.side.toLowerCase().includes(q) ||
@@ -395,9 +411,9 @@ export default function HistoryPage() {
                   {q ? `— no results for "${searchText}"` : '— no price activity for selected range'}
                 </td></tr>
               ) : filteredPriceChanges.map((pc, i) => {
-                const canSeeDealer  = isTrader || pc.dealer === myDealerCode
-                const visibleDealer = canSeeDealer ? (pc.dealer ?? '—') : '—'
-                const dealerColor   = canSeeDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
+                const showDealer    = canViewDealerName(pc.dealer, myDealerCode, isTrader)
+                const visibleDealer = showDealer ? (pc.dealer ?? '—') : '—'
+                const dealerColor   = showDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
                 const spx   = spxFor(pc.created_at, pc.spx_at_time)
                 const cdxHy = cdxHyFor(pc.created_at)
                 const cdxIg = cdxIgFor(pc.created_at)
@@ -441,9 +457,6 @@ export default function HistoryPage() {
           <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>TRADE LOG</span>
             <span style={{ color: '#3a3a3a', fontSize: '11px' }}>{filteredTrades.length} trades</span>
-            {q && filteredTrades.length !== trades.length && (
-              <span style={{ color: '#444', fontSize: '10px' }}>({trades.length} total)</span>
-            )}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
@@ -484,7 +497,7 @@ export default function HistoryPage() {
                     {isTrader && <td style={{ padding: '3px 6px', color: '#ff6666', fontWeight: 700 }}>{seller ?? '—'}</td>}
                     {!isTrader && <td style={{ padding: '3px 6px', color: DEALER_COLORS[cpty ?? ''] ?? '#666', fontWeight: 700 }}>{cpty ?? '—'}</td>}
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: '#f0c040', fontWeight: 700 }}>
-                      {t.price != null ? t.price : <span style={{ color: '#2a2a2a' }}>—</span>}
+                      {formatPx(t.price, null)}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size ?? '—'}</td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
