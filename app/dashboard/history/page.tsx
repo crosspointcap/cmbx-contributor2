@@ -279,21 +279,21 @@ export default function HistoryPage() {
   }, [priceChanges, q, isTrader, myDealerCode])
 
   const filteredTrades = useMemo(() => {
-    // Apply access control: dealers only see their own trades
-    const visible = trades.filter(t => canViewTrade(t, myDealerCode, isTrader))
-    if (!q) return visible
-    return visible.filter(t => {
-      const buyer = t.side === 'lift' ? t.dealer : t.passive_dealer
+    // All trades are visible to everyone — dealer names are shown per-row only if involved
+    if (!q) return trades
+    return trades.filter(t => {
+      const isInvolved = myDealerCode != null && (t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
+      const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
       const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
-      const cpty  = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
+      const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
       return (
         `${t.tranche_name}.${t.series_number}`.toLowerCase().includes(q) ||
         t.tranche_name.toLowerCase().includes(q) ||
         t.series_number.toLowerCase().includes(q) ||
         t.side.toLowerCase().includes(q) ||
-        (isTrader && (buyer ?? '').toLowerCase().includes(q)) ||
-        (isTrader && (seller ?? '').toLowerCase().includes(q)) ||
-        (!isTrader && (cpty ?? '').toLowerCase().includes(q))
+        (isTrader  && (buyer  ?? '').toLowerCase().includes(q)) ||
+        (isTrader  && (seller ?? '').toLowerCase().includes(q)) ||
+        (isInvolved && (cpty  ?? '').toLowerCase().includes(q))
       )
     })
   }, [trades, q, isTrader, myDealerCode])
@@ -481,8 +481,11 @@ export default function HistoryPage() {
                   {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
                 </td></tr>
               ) : filteredTrades.map((t, i) => {
-                // For traders: show both buyer and seller
-                // For dealers: show only who they traded against
+                // isInvolved = this viewer is a party to this specific trade
+                const isInvolved = myDealerCode != null &&
+                  (t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
+                // Traders see buyer + seller columns; everyone else sees CPTY
+                // Names only shown when trader OR directly involved in the trade
                 const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
@@ -496,7 +499,11 @@ export default function HistoryPage() {
                     <td style={{ padding: '3px 6px',  color: '#fff' }}>{t.tranche_name}.{t.series_number}</td>
                     {isTrader && <td style={{ padding: '3px 6px', color: '#66ff88', fontWeight: 700 }}>{buyer ?? '—'}</td>}
                     {isTrader && <td style={{ padding: '3px 6px', color: '#ff6666', fontWeight: 700 }}>{seller ?? '—'}</td>}
-                    {!isTrader && <td style={{ padding: '3px 6px', color: DEALER_COLORS[cpty ?? ''] ?? '#666', fontWeight: 700 }}>{cpty ?? '—'}</td>}
+                    {!isTrader && (
+                      <td style={{ padding: '3px 6px', color: isInvolved ? (DEALER_COLORS[cpty ?? ''] ?? '#888') : '#2a2a2a', fontWeight: isInvolved ? 700 : 400 }}>
+                        {isInvolved ? (cpty ?? '—') : '—'}
+                      </td>
+                    )}
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: '#f0c040', fontWeight: 700 }}>
                       {formatPx(t.price, null)}
                     </td>
