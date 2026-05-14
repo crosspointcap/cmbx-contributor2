@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { fmt32nds, formatPx, fmtTime, fmtShortDate } from '../../../lib/utils'
+import { formatPx, fmtTime, fmtShortDate } from '../../../lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -225,7 +225,7 @@ export default function MarketPage() {
         })}
       </div>
 
-      {/* Main content: price grid (left) + trade history (right) */}
+      {/* Price grid */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* Price grid */}
