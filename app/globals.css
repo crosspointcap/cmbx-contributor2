@@ -74,10 +74,3 @@ body {
   scrollbar-width: thin;
   scrollbar-color: #222222 #0a0a0a;
 }
-
-@media print {
-  body > * { display: none !important; }
-  #confirm-doc { display: block !important; position: fixed; inset: 0; background: #fff; }
-  .no-print { display: none !important; }
-  .print-only { display: inline !important; }
-}

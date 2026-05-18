@@ -12,7 +12,6 @@ const supabase = createClient(
 )
 
 const DEALERS = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
-const VIEW_AS_OPTIONS = ['ALL', ...DEALERS]
 
 const DEFAULT_SIZE: Record<string, number> = {
   AAA:   25,
@@ -158,6 +157,15 @@ interface TrancheConfig {
   sort_order: number
 }
 
+// CDX HY snapshot recorded when MS submits a price — drives auto-adjustment
+interface MsSnapshot {
+  cdxHyAtEntry: number      // CDX HY px at time of submission
+  bidAtEntry: number | null // original bid (unadjusted)
+  askAtEntry: number | null // original ask (unadjusted)
+  modeAtEntry: string
+  lastAppliedAdj: number    // ticks already applied (to avoid re-applying same adj)
+}
+
 interface BlotterTrade {
   id: string
   time: string
@@ -168,12 +176,6 @@ interface BlotterTrade {
   passive_dealer: string | null
   trade_size: number | null
   price: number | null
-}
-
-interface PresenceUser {
-  dealer_code: string
-  page: string
-  online_at: string
 }
 
 
@@ -238,15 +240,12 @@ function parseBulkLines(text: string): Array<{ series: string; bid: number; ask:
 
     const seriesNum = Math.abs(parseInt(seriesPart, 10))
     if (!seriesNum || isNaN(seriesNum)) continue
-    // Strip leading $ before testing for 32nds so "$81-12" is handled correctly
-    const bidRaw = bidStr.replace(/^\$/, '')
-    const mode = /^\d+-\d{1,2}$/.test(bidRaw) ? 'ticks'
-               : bidStr.startsWith('$')         ? 'price'
-               :                                  'spread'
-    const parsePx = (s: string) => {
-      const raw = s.replace(/^\$/, '')
-      return mode === 'ticks' ? parse32nds(raw) : (parseFloat(raw) || null)
-    }
+    const mode = /^\d+-\d{1,2}$/.test(bidStr) ? 'ticks'
+               : bidStr.startsWith('$')        ? 'price'
+               :                                 'spread'
+    const parsePx = (s: string) =>
+      mode === 'ticks' ? parse32nds(s.replace('$', ''))
+                       : (parseFloat(s.replace('$', '')) || null)
     const bid = parsePx(bidStr)
     const ask = parsePx(askStr)
     if (bid == null || ask == null) continue
@@ -289,8 +288,8 @@ export default function BackendPage() {
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
-  const [onlineUsers,  setOnlineUsers]  = useState<PresenceUser[]>([])
-  const [viewAs,       setViewAs]       = useState<string>('ALL')
+  const [cdxLiveHy,    setCdxLiveHy]    = useState<number | null>(null)
+  const [autoAdjMsg,   setAutoAdjMsg]   = useState<string>('')
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
     series_number: string; tranche_name: string; mode?: string | null
     bid?: number | null; bid_size?: string | null
@@ -310,6 +309,9 @@ export default function BackendPage() {
   const selectedRowRef      = useRef(selectedRow)
   const blotterBroadcastRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const latestSpxRef        = useRef<number | null>(null)
+  const latestCdxRef        = useRef<{ hy: number | null; ig: number | null }>({ hy: null, ig: null })
+  // MS delta-hedge snapshots: keyed by "series:tranche"
+  const msSnapshotsRef      = useRef<Record<string, MsSnapshot>>({})
   selectedDealerRef.current = selectedDealer
   selectedRowRef.current    = selectedRow
 
@@ -343,32 +345,6 @@ export default function BackendPage() {
     return () => clearInterval(id)
   }, [])
 
-  useEffect(() => {
-    const saved = localStorage.getItem('cmbx_admin_view_as')
-    if (saved && VIEW_AS_OPTIONS.includes(saved)) setViewAs(saved)
-  }, [])
-
-  // ── Presence: WHO'S ONLINE ────────────────────────────────────────────────
-  useEffect(() => {
-    if (!authChecked) return
-    const ch = supabase.channel('platform-presence')
-    ch
-      .on('presence', { event: 'sync' }, () => {
-        const state = ch.presenceState<PresenceUser>()
-        const users: PresenceUser[] = []
-        for (const presences of Object.values(state)) {
-          for (const p of presences as PresenceUser[]) users.push(p)
-        }
-        setOnlineUsers(users)
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await ch.track({ dealer_code: 'ADMIN', page: 'admin', online_at: new Date().toISOString() })
-        }
-      })
-    return () => { supabase.removeChannel(ch) }
-  }, [authChecked])
-
   // Persistent broadcast channel — wait for SUBSCRIBED before storing ref
   useEffect(() => {
     const ch = supabase.channel('trade-blotter-sync')
@@ -395,7 +371,8 @@ export default function BackendPage() {
         } else {
           const p = payload.new as Price
           const key = `${p.series_number}:${p.tranche_name}`
-          setPrices(prev => ({ ...prev, [key]: p }))
+          // Merge — preserves mode and other unchanged cols absent from realtime payload
+          setPrices(prev => ({ ...prev, [key]: { ...prev[key], ...p } }))
           // Keep ghost of last non-null bid/ask so cleared prices stay visible in grey
           setGhostPrices(prev => mergeGhost(prev, key, p))
         }
@@ -410,6 +387,16 @@ export default function BackendPage() {
         const hb = payload.new as { bbg_connected?: boolean; active?: boolean }
         setAgentOnline(hb.bbg_connected ?? hb.active ?? false)
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cdx_intraday' }, (payload) => {
+        const row = payload.new as { cdx_hy?: number | null; cdx_ig?: number | null }
+        const hy = row.cdx_hy ?? null
+        const ig = row.cdx_ig ?? null
+        if (hy != null) {
+          latestCdxRef.current = { hy, ig: ig ?? latestCdxRef.current.ig }
+          setCdxLiveHy(hy)
+          applyMsAdjustments(hy)
+        }
+      })
       .subscribe()
 
     async function fetchSpx() {
@@ -417,6 +404,14 @@ export default function BackendPage() {
         const res = await fetch('/api/spx')
         const { spx } = await res.json()
         if (spx != null) latestSpxRef.current = spx
+      } catch {}
+    }
+
+    async function fetchCdx() {
+      try {
+        const res = await fetch('/api/cdx')
+        const { cdx_hy, cdx_ig } = await res.json()
+        latestCdxRef.current = { hy: cdx_hy ?? null, ig: cdx_ig ?? null }
       } catch {}
     }
 
@@ -445,14 +440,17 @@ export default function BackendPage() {
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
     }
 
-    // Fetch SPX immediately, then refresh every 5 minutes
+    // Fetch SPX and CDX immediately, then refresh every 5 minutes
     fetchSpx()
+    fetchCdx()
     const spxInterval = setInterval(fetchSpx, 5 * 60 * 1000)
+    const cdxInterval = setInterval(fetchCdx, 5 * 60 * 1000)
 
     loadData()
     return () => {
       cancelled = true
       clearInterval(spxInterval)
+      clearInterval(cdxInterval)
       supabase.removeChannel(ch)
       // Clear all pending timers on unmount
       Object.values(flashTimers.current).forEach(clearTimeout)
@@ -520,6 +518,23 @@ export default function BackendPage() {
 
     await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
 
+    // MS delta-hedge snapshot — record CDX HY at the moment of price entry
+    if (dealer === 'MS' && (field === 'bid' || field === 'ask') && latestCdxRef.current.hy != null) {
+      if (numericValue == null) {
+        // Price cleared — remove snapshot so auto-adj stops for this row
+        delete msSnapshotsRef.current[key]
+      } else {
+        const prev = msSnapshotsRef.current[key]
+        msSnapshotsRef.current[key] = {
+          cdxHyAtEntry: latestCdxRef.current.hy,
+          bidAtEntry:   field === 'bid' ? numericValue : (existing?.bid   ?? prev?.bidAtEntry ?? null),
+          askAtEntry:   field === 'ask' ? numericValue : (existing?.ask   ?? prev?.askAtEntry ?? null),
+          modeAtEntry:  mode,
+          lastAppliedAdj: 0,  // reset on fresh entry
+        }
+      }
+    }
+
     // Log every bid/ask price entry to the audit table
     if (trimmed !== '' && numericValue != null) {
       const sz = field === 'bid'
@@ -564,7 +579,7 @@ export default function BackendPage() {
     const rows = blotterTrades.map(t => ({
       'TIME (ET)':   t.time,
       'ACTION':      t.action,
-      'TRANCHE':     `CMBX.${t.series}.${t.tranche}`,
+      'TRANCHE':     `${t.tranche}.${t.series}`,
       'BUYER':       t.action === 'LIFT' ? t.dealer : (t.passive_dealer ?? ''),
       'SELLER':      t.action === 'LIFT' ? (t.passive_dealer ?? '') : t.dealer,
       'PRICE':       t.price ?? '',
@@ -587,9 +602,55 @@ export default function BackendPage() {
     setPrices({})
     setGhostPrices({})
     setPulledPrices({})
+    msSnapshotsRef.current = {}  // clear all MS auto-adj snapshots
     setTradeLog(null)
     setSelectedRow(null)
     setConfirmClear(false)
+  }
+
+  // ── MS CDX HY auto-adjustment ─────────────────────────────────────────────
+  // Rule: every 6.25c (0.0625) move in CDX HY from the snapshot → ±2 ticks on MS prices
+  function applyMsAdjustments(newCdxHy: number) {
+    const snaps = msSnapshotsRef.current
+    const entries = Object.entries(snaps)
+    if (entries.length === 0) return
+
+    let adjCount = 0
+    for (const [key, snap] of entries) {
+      const cdxMove = newCdxHy - snap.cdxHyAtEntry
+      // Complete 6.25c steps (signed)
+      const steps   = Math.trunc(cdxMove / 0.0625)
+      const tickAdj = steps * 2   // 2 ticks per 6.25c step
+
+      if (tickAdj === snap.lastAppliedAdj) continue  // no change since last apply
+
+      const newBid = snap.bidAtEntry != null ? snap.bidAtEntry + tickAdj / 32 : null
+      const newAsk = snap.askAtEntry != null ? snap.askAtEntry + tickAdj / 32 : null
+
+      const [seriesNum, trancheName] = key.split(':')
+      const payload: Record<string, unknown> = {
+        series_number: seriesNum,
+        tranche_name:  trancheName,
+        mode:          snap.modeAtEntry,
+      }
+      if (newBid != null) { payload.bid = newBid; payload.bid_dealer = 'MS' }
+      if (newAsk != null) { payload.ask = newAsk; payload.ask_dealer = 'MS' }
+
+      supabase.from('prices')
+        .upsert(payload, { onConflict: 'series_number,tranche_name' })
+        .then(({ error }) => {
+          if (!error) snaps[key].lastAppliedAdj = tickAdj
+          else console.warn('[auto-adj] upsert failed:', error.message)
+        })
+
+      flashRowEffect(key, tickAdj < 0 ? 'red' : 'green')
+      adjCount++
+    }
+
+    if (adjCount > 0) {
+      const dir   = Object.values(snaps)[0] ? (newCdxHy > Object.values(snaps)[0].cdxHyAtEntry ? '↑' : '↓') : ''
+      setAutoAdjMsg(`[${fmtTime(new Date().toISOString())}] AUTO-ADJ ${adjCount} MS price${adjCount !== 1 ? 's' : ''} — CDX HY ${dir}${newCdxHy.toFixed(2)}`)
+    }
   }
 
   function showError(msg: string) {
@@ -621,6 +682,20 @@ export default function BackendPage() {
           { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current },
         ]).then(({ error }) => { if (error) console.warn('[bulk price_changes]', error.message) })
       }
+      // MS bulk — snapshot CDX HY for every submitted row
+      if (dealer === 'MS' && latestCdxRef.current.hy != null) {
+        const hy = latestCdxRef.current.hy
+        for (const r of parsedBulk) {
+          msSnapshotsRef.current[`${r.series}:${bulkTranche}`] = {
+            cdxHyAtEntry:   hy,
+            bidAtEntry:     r.bid,
+            askAtEntry:     r.ask,
+            modeAtEntry:    r.mode,
+            lastAppliedAdj: 0,
+          }
+        }
+      }
+
       setShowBulkInput(false)
       setBulkText('')
     } finally {
@@ -786,28 +861,16 @@ export default function BackendPage() {
           }}>
             ADMIN
           </span>
+          {cdxLiveHy != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#0e0900', border: '1px solid #3a2a00', padding: '1px 7px', borderRadius: '2px' }}>
+              <span style={{ color: '#ff8844', fontSize: '11px', letterSpacing: '1px' }}>HY</span>
+              <span style={{ color: '#ffaa55', fontSize: '13px', fontWeight: 700 }}>{cdxLiveHy.toFixed(2)}</span>
+            </span>
+          )}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: agentOnline ? '#66ff88' : '#444', display: 'inline-block', flexShrink: 0 }} />
             <span style={{ color: '#555', fontSize: '13px' }}>AGENT</span>
           </span>
-          <span style={{ color: '#333', fontSize: '12px' }}>VIEW AS</span>
-          <select
-            value={viewAs}
-            onChange={e => { setViewAs(e.target.value); localStorage.setItem('cmbx_admin_view_as', e.target.value) }}
-            style={{
-              background: '#111',
-              border: '1px solid #333',
-              color: viewAs === 'ALL' ? '#555' : '#f0c040',
-              fontFamily: 'Courier New, monospace',
-              fontSize: '13px',
-              padding: '2px 6px',
-              outline: 'none',
-              cursor: 'pointer',
-              borderRadius: '2px',
-            }}
-          >
-            {VIEW_AS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-          </select>
           <a href="/dashboard/market" style={{ color: '#555', fontSize: '15px', border: '1px solid #2a2a2a', padding: '2px 8px', textDecoration: 'none', borderRadius: '2px' }}>
             MARKET
           </a>
@@ -846,35 +909,6 @@ export default function BackendPage() {
 
       {/* Nav tabs */}
       <NavTabs active="admin" isTrader={true} />
-
-      {/* WHO'S ONLINE */}
-      {onlineUsers.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#060606', flexWrap: 'wrap' }}>
-          <span style={{ color: '#333', fontSize: '11px', fontFamily: 'Courier New, monospace', marginRight: '2px', letterSpacing: '1px' }}>ONLINE</span>
-          {onlineUsers.map((u, i) => {
-            const s = DEALER_INACTIVE[u.dealer_code]
-            const elapsedSec = Math.floor((Date.now() - new Date(u.online_at).getTime()) / 1000)
-            const elapsedStr = elapsedSec < 60 ? `${elapsedSec}s` : elapsedSec < 3600 ? `${Math.floor(elapsedSec / 60)}m` : `${Math.floor(elapsedSec / 3600)}h`
-            return (
-              <span key={i} style={{
-                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                background: s?.bg ?? '#181818',
-                color: s?.color ?? '#888',
-                border: `1px solid ${s?.border ?? '#333'}`,
-                padding: '1px 7px',
-                fontSize: '11px',
-                borderRadius: '2px',
-                fontFamily: 'Courier New, monospace',
-                whiteSpace: 'nowrap',
-              }}>
-                <span style={{ fontWeight: 700 }}>{u.dealer_code}</span>
-                <span style={{ color: s ? s.color + 'aa' : '#555', fontSize: '10px' }}>{u.page.toUpperCase()}</span>
-                <span style={{ color: s ? s.color + '66' : '#444', fontSize: '10px' }}>{elapsedStr}</span>
-              </span>
-            )
-          })}
-        </div>
-      )}
 
       {/* Dealer + action — single combined row */}
       <div style={{ display: 'flex', alignItems: 'flex-end', padding: '3px 10px', gap: '3px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
@@ -1009,10 +1043,7 @@ export default function BackendPage() {
                   const flash = flashRows[rowKey]
                   const isOdd = tIdx % 2 === 1
 
-                  const viewingDealer = viewAs !== 'ALL' ? viewAs : null
-                  const rowHasViewed  = viewingDealer && (price?.bid_dealer === viewingDealer || price?.ask_dealer === viewingDealer)
-
-                  let rowBg = isActive ? '#1a1500' : rowHasViewed ? '#0e0e00' : isOdd ? '#0d0d0d' : 'transparent'
+                  let rowBg = isActive ? '#1a1500' : isOdd ? '#0d0d0d' : 'transparent'
                   if (flash === 'red') rowBg = '#3a0000'
                   if (flash === 'green') rowBg = '#003a00'
 
@@ -1024,14 +1055,11 @@ export default function BackendPage() {
                   const ghostAsk = price?.ask == null ? ghost?.ask : undefined
                   const ghostMode = ghost?.mode
 
-                  const isBidViewed = viewingDealer != null && price?.bid_dealer === viewingDealer
-                  const isAskViewed = viewingDealer != null && price?.ask_dealer === viewingDealer
-
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
                       {price?.bid != null ? (
                         <>
-                          <span style={{ color: isBidViewed ? '#f0c040' : '#ffffff', fontWeight: isBidViewed ? 700 : 400 }}>{formatPx(price.bid, price.mode)}</span>
+                          <span style={{ color: '#ffffff' }}>{formatPx(price.bid, price.mode)}</span>
                           {bidTag && <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.bid_dealer}</span>}
                         </>
                       ) : ghostBid != null ? (
@@ -1046,7 +1074,7 @@ export default function BackendPage() {
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
                       {price?.ask != null ? (
                         <>
-                          <span style={{ color: isAskViewed ? '#f0c040' : '#ffffff', fontWeight: isAskViewed ? 700 : 400 }}>{formatPx(price.ask, price.mode)}</span>
+                          <span style={{ color: '#ffffff' }}>{formatPx(price.ask, price.mode)}</span>
                           {askTag && <span style={{ background: askTag.bg, color: askTag.color, fontSize: '15px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.ask_dealer}</span>}
                         </>
                       ) : ghostAsk != null ? (
@@ -1134,7 +1162,7 @@ export default function BackendPage() {
                     <span style={{ color: t.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700, fontSize: '13px' }}>{t.action}</span>
                     <span style={{ color: '#444', fontSize: '11px' }}>{t.time}</span>
                   </div>
-                  <div style={{ color: '#ccc', fontSize: '13px' }}>CMBX.{t.series}.{t.tranche}</div>
+                  <div style={{ color: '#ccc', fontSize: '13px' }}>{t.tranche}.{t.series}</div>
                   <div style={{ marginTop: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
                       <span style={{ color: '#66ff88', fontWeight: 700 }}>
@@ -1146,7 +1174,7 @@ export default function BackendPage() {
                       <span style={{ color: '#ff6666', fontWeight: 700 }}>
                         {t.action === 'LIFT' ? (t.passive_dealer ?? '?') : t.dealer}
                       </span>
-                      <span style={{ marginLeft: 'auto', color: '#888', fontSize: '12px' }}>@ {t.price ?? '—'}</span>
+                      <span style={{ marginLeft: 'auto', color: '#888', fontSize: '12px' }}>@ {formatPx(t.price, null)}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
@@ -1426,20 +1454,29 @@ export default function BackendPage() {
         )
       })()}
 
+      {/* Auto-adj notification bar — only shown when an adjustment has fired */}
+      {autoAdjMsg && (
+        <div style={{ borderTop: '1px solid #1e1e1e', padding: '3px 12px', flexShrink: 0, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px', background: '#0a0800', color: '#ff8844' }}>
+          <span style={{ letterSpacing: '1px', fontWeight: 700 }}>AUTO-ADJ</span>
+          <span style={{ color: '#666' }}>{autoAdjMsg}</span>
+          <button onClick={() => setAutoAdjMsg('')} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', fontSize: '13px', fontFamily: 'Courier New' }}>×</button>
+        </div>
+      )}
+
       {/* Trade log bar */}
       <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '15px', minHeight: '28px', display: 'flex', alignItems: 'center', gap: '8px', background: '#080808' }}>
         {tradeLog ? (
           <>
             <span style={{ color: '#444' }}>[{tradeLog.time}]</span>
             <span style={{ color: tradeLog.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700 }}>{tradeLog.action}</span>
-            <span style={{ color: '#666' }}>— CMBX.{tradeLog.series}.{tradeLog.tranche}</span>
+            <span style={{ color: '#666' }}>— {tradeLog.tranche}.{tradeLog.series}</span>
             <span style={{ color: '#444' }}>BUYER</span>
             <span style={{ color: '#66ff88', fontWeight: 700 }}>{tradeLog.action === 'LIFT' ? tradeLog.dealer : (tradeLog.passive_dealer ?? '?')}</span>
             <span style={{ color: '#333' }}>↔</span>
             <span style={{ color: '#444' }}>SELLER</span>
             <span style={{ color: '#ff6666', fontWeight: 700 }}>{tradeLog.action === 'LIFT' ? (tradeLog.passive_dealer ?? '?') : tradeLog.dealer}</span>
             <span style={{ color: '#444' }}>@</span>
-            <span style={{ color: '#bbb' }}>{tradeLog.price ?? '—'}</span>
+            <span style={{ color: '#bbb' }}>{formatPx(tradeLog.price, null)}</span>
             <span style={{ color: '#333' }}>▶</span>
             <span style={{ color: '#66ff88' }}>BLOTTER ✓</span>
           </>

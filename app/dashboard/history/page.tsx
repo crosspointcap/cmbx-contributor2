@@ -71,12 +71,6 @@ const DEALER_COLORS: Record<string, string> = {
 function canViewDealerName(priceDealer: string | null, myDealerCode: string | null, isTrader: boolean): boolean {
   return isTrader || priceDealer === myDealerCode
 }
-// Helper: should this viewer see this trade at all?
-function canViewTrade(t: { dealer: string | null; passive_dealer: string | null }, myDealerCode: string | null, isTrader: boolean): boolean {
-  if (isTrader) return true
-  if (!myDealerCode) return false  // unauthenticated: hide all trade names/details
-  return t.dealer === myDealerCode || t.passive_dealer === myDealerCode
-}
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DATE_INPUT_STYLE: React.CSSProperties = {

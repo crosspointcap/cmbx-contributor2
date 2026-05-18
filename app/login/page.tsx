@@ -16,53 +16,13 @@ export default function LoginPage() {
   async function handleLogin() {
     setLoading(true)
     setError('')
-
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-    if (signInError || !data.user) {
-      setError(signInError?.message ?? 'Login failed')
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) {
+      setError(error.message)
       setLoading(false)
       return
     }
-
-    // Fetch profile to determine role-based redirect
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', data.user.id)
-      .single()
-
-    if (profileError || !profile) {
-      setError(`Profile not found: ${profileError?.message ?? 'no profile row'}. Contact admin.`)
-      setLoading(false)
-      return
-    }
-
-    if (profile.role === 'trader') {
-      window.location.href = '/dashboard/backend'
-    } else {
-      window.location.href = '/dashboard/market'
-    }
-  }
-
-  const inputStyle: React.CSSProperties = {
-    background: '#1a1a1a',
-    border: '1px solid #333333',
-    color: '#ffffff',
-    padding: '10px',
-    width: '100%',
-    fontFamily: 'Courier New, monospace',
-    fontSize: '15px',
-    outline: 'none',
-    boxSizing: 'border-box',
-  }
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    color: '#888888',
-    fontSize: '11px',
-    letterSpacing: '1px',
-    fontFamily: 'Courier New, monospace',
-    marginBottom: '6px',
+    window.location.href = '/dashboard/backend'
   }
 
   return (
@@ -72,7 +32,7 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontFamily: 'Courier New, monospace',
+      fontFamily: '"IBM Plex Mono", monospace',
     }}>
       <div style={{
         background: '#111111',
@@ -83,10 +43,10 @@ export default function LoginPage() {
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{
             color: '#f0c040',
-            fontSize: '22px',
-            fontFamily: 'Courier New, monospace',
+            fontSize: '24px',
+            fontFamily: '"IBM Plex Mono", monospace',
             letterSpacing: '4px',
-            fontWeight: 700,
+            fontWeight: 600,
             marginBottom: '8px',
           }}>
             CMBX CONTRIBUTOR
@@ -95,31 +55,68 @@ export default function LoginPage() {
             color: '#555555',
             fontSize: '12px',
             letterSpacing: '2px',
-            fontFamily: 'Courier New, monospace',
           }}>
             — CROSSPOINT CAPITAL
           </div>
         </div>
 
         <div style={{ marginBottom: '16px' }}>
-          <label style={labelStyle}>EMAIL</label>
+          <label style={{
+            display: 'block',
+            color: '#888888',
+            fontSize: '11px',
+            letterSpacing: '1px',
+            fontFamily: '"IBM Plex Mono", monospace',
+            marginBottom: '6px',
+          }}>
+            EMAIL
+          </label>
           <input
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={inputStyle}
+            style={{
+              background: '#1a1a1a',
+              border: '1px solid #333333',
+              color: '#ffffff',
+              padding: '10px',
+              width: '100%',
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontSize: '13px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
           />
         </div>
 
         <div style={{ marginBottom: '24px' }}>
-          <label style={labelStyle}>PASSWORD</label>
+          <label style={{
+            display: 'block',
+            color: '#888888',
+            fontSize: '11px',
+            letterSpacing: '1px',
+            fontFamily: '"IBM Plex Mono", monospace',
+            marginBottom: '6px',
+          }}>
+            PASSWORD
+          </label>
           <input
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={inputStyle}
+            style={{
+              background: '#1a1a1a',
+              border: '1px solid #333333',
+              color: '#ffffff',
+              padding: '10px',
+              width: '100%',
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontSize: '13px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
           />
         </div>
 
@@ -128,7 +125,7 @@ export default function LoginPage() {
             color: '#ff6666',
             fontSize: '12px',
             marginBottom: '16px',
-            fontFamily: 'Courier New, monospace',
+            fontFamily: '"IBM Plex Mono", monospace',
           }}>
             {error}
           </div>
@@ -143,9 +140,9 @@ export default function LoginPage() {
             border: 'none',
             padding: '12px',
             width: '100%',
-            fontFamily: 'Courier New, monospace',
-            fontSize: '15px',
-            fontWeight: 700,
+            fontFamily: '"IBM Plex Mono", monospace',
+            fontSize: '13px',
+            fontWeight: 500,
             letterSpacing: '2px',
             cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.7 : 1,
@@ -159,7 +156,7 @@ export default function LoginPage() {
           marginTop: '24px',
           color: '#333333',
           fontSize: '11px',
-          fontFamily: 'Courier New, monospace',
+          fontFamily: '"IBM Plex Mono", monospace',
         }}>
           INTERNAL USE ONLY
         </div>

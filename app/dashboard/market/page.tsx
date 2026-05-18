@@ -77,15 +77,22 @@ export default function MarketPage() {
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
   const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
+  const [authReady, setAuthReady] = useState(false)
   const [hiddenCols, setHiddenCols] = useState<Set<ColKey>>(new Set())
 
-  // ── Soft auth check — get dealer identity if logged in ────────────────────
+  // ── Hard auth — redirect to /login if no session; traders go to /backend ────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return
-      supabase.from('profiles').select('dealer_code').eq('id', session.user.id).single()
-        .then(({ data }) => { if (data?.dealer_code) setMyDealerCode(data.dealer_code) })
-    })
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { window.location.href = '/login'; return }
+      const { data: prof } = await supabase
+        .from('profiles').select('role, dealer_code').eq('id', session.user.id).single()
+      // Traders belong on the backend page — send them there
+      if (prof?.role === 'trader') { window.location.href = '/dashboard/backend'; return }
+      if (prof?.dealer_code) setMyDealerCode(prof.dealer_code)
+      setAuthReady(true)
+    }
+    checkAuth()
   }, [])
 
   // ── Column visibility — persist to localStorage ───────────────────────────
@@ -125,7 +132,9 @@ export default function MarketPage() {
       .channel(`market-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prices' }, (payload) => {
         const p = payload.new as Price
-        setPrices(prev => ({ ...prev, [`${p.series_number}:${p.tranche_name}`]: p }))
+        const key = `${p.series_number}:${p.tranche_name}`
+        // Merge into existing — preserves mode (and other unchanged cols) if not in the realtime payload
+        setPrices(prev => ({ ...prev, [key]: { ...prev[key], ...p } }))
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const t = payload.new as any
@@ -170,6 +179,8 @@ export default function MarketPage() {
     }, 250)
   }
 
+  if (!authReady) return null
+
   return (
     <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '14px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -198,7 +209,7 @@ export default function MarketPage() {
       {/* Nav tabs — dealers see MARKET + HISTORY only, no ADMIN */}
       <NavTabs active="market" isTrader={false} />
 
-      {/* Column visibility toggles — always visible so columns can be restored */}
+      {/* Column visibility toggles */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderBottom: '1px solid #161616', flexShrink: 0, background: '#060606' }}>
         <span style={{ color: '#282828', fontSize: '10px', marginRight: '2px', letterSpacing: '1px' }}>COLS</span>
         {ALL_COLS.map(col => {

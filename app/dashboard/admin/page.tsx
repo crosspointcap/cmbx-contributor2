@@ -4,11 +4,19 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SeriesConfig, TrancheConfig, Dealer, Trade } from '@/lib/types'
-import { fmtTime } from '../../../lib/utils'
 
 type Tab = 'SERIES' | 'TRANCHES' | 'DEALERS' | 'BLOTTER'
 
-// Full date+time stamp for the blotter (different format from utils fmtDate which is date-only)
+function formatTime(ts: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(ts))
+}
+
 function formatDate(ts: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -287,7 +295,7 @@ export default function AdminPage() {
     'px-3 py-1 text-xs border border-[#333] text-[#555] rounded-[3px] cursor-pointer'
   const btnEdit =
     'px-3 py-1 text-xs border border-[#f0c04066] text-[#f0c040] hover:border-[#f0c040] rounded-[3px] cursor-pointer'
-  const thClass = 'text-left py-2 pr-6 text-white text-sm font-bold border-b border-[#222]'
+  const thClass = 'text-left py-2 pr-6 text-[#555] text-xs font-normal border-b border-[#222]'
   const tdClass = 'py-2 pr-6 text-xs border-b border-[#1a1a1a]'
 
   return (
@@ -1029,7 +1037,7 @@ export default function AdminPage() {
                         <span className="text-[#66ff88]">
                           ✓{' '}
                           {trade.bbg_publish_time
-                            ? fmtTime(trade.bbg_publish_time)
+                            ? formatTime(trade.bbg_publish_time)
                             : ''}
                         </span>
                       ) : (
