@@ -391,8 +391,12 @@ export default function BackendPage() {
         const row = payload.new as { cdx_hy?: number | null; cdx_ig?: number | null }
         const hy = row.cdx_hy ?? null
         const ig = row.cdx_ig ?? null
+        // Update whichever fields are present — never clobber a live value with null
+        latestCdxRef.current = {
+          hy: hy ?? latestCdxRef.current.hy,
+          ig: ig ?? latestCdxRef.current.ig,
+        }
         if (hy != null) {
-          latestCdxRef.current = { hy, ig: ig ?? latestCdxRef.current.ig }
           setCdxLiveHy(hy)
           applyMsAdjustments(hy)
         }
@@ -411,7 +415,11 @@ export default function BackendPage() {
       try {
         const res = await fetch('/api/cdx')
         const { cdx_hy, cdx_ig } = await res.json()
-        latestCdxRef.current = { hy: cdx_hy ?? null, ig: cdx_ig ?? null }
+        // Only fill null slots — never overwrite live values already set by cdx_intraday
+        latestCdxRef.current = {
+          hy: latestCdxRef.current.hy ?? cdx_hy ?? null,
+          ig: latestCdxRef.current.ig ?? cdx_ig ?? null,
+        }
       } catch {}
     }
 
@@ -549,8 +557,12 @@ export default function BackendPage() {
         size:   sz,
         mode,
       }
-      supabase.from('price_changes').insert({ ...baseRow, spx_at_time: latestSpxRef.current })
-        .then(({ error }) => { if (error) console.warn('[price_changes insert failed]', error.message) })
+      supabase.from('price_changes').insert({
+        ...baseRow,
+        spx_at_time:    latestSpxRef.current,
+        cdx_hy_at_time: latestCdxRef.current.hy,
+        cdx_ig_at_time: latestCdxRef.current.ig,
+      }).then(({ error }) => { if (error) console.warn('[price_changes insert failed]', error.message) })
     }
 
     setEditingCell(null)
@@ -678,8 +690,8 @@ export default function BackendPage() {
           mode: r.mode,
         }, { onConflict: 'series_number,tranche_name' })
         supabase.from('price_changes').insert([
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current },
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current },
+          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
+          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
         ]).then(({ error }) => { if (error) console.warn('[bulk price_changes]', error.message) })
       }
       // MS bulk — snapshot CDX HY for every submitted row
@@ -1094,7 +1106,7 @@ export default function BackendPage() {
                       onClick={() => setSelectedRow(prev => prev === rowKey ? null : rowKey)}
                       style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
                     >
-                      <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
+                      <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px', fontWeight: 700 }}>
                         {`${t.tranche_name}.${s.series_number}`}
                       </td>
                       {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '3px 8px' })}

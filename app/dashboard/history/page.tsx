@@ -24,6 +24,8 @@ interface PriceChange {
   size: string | null
   mode: string | null
   spx_at_time: number | null
+  cdx_hy_at_time: number | null
+  cdx_ig_at_time: number | null
 }
 
 interface TradeRow {
@@ -128,6 +130,8 @@ export default function HistoryPage() {
           series_number: pc.series_number, tranche_name: pc.tranche_name,
           dealer: pc.dealer, side: pc.side, price: pc.price, size: pc.size,
           mode: pc.mode, spx_at_time: pc.spx_at_time ?? null,
+          cdx_hy_at_time: pc.cdx_hy_at_time ?? null,
+          cdx_ig_at_time: pc.cdx_ig_at_time ?? null,
         }, ...prev])
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
@@ -161,7 +165,7 @@ export default function HistoryPage() {
     try {
       let pcQ = supabase
         .from('price_changes')
-        .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode, spx_at_time')
+        .select('id, created_at, series_number, tranche_name, dealer, side, price, size, mode, spx_at_time, cdx_hy_at_time, cdx_ig_at_time')
         .order('created_at', { ascending: false })
         .limit(2000)
 
@@ -247,11 +251,13 @@ export default function HistoryPage() {
     return spxByDate[ts.split('T')[0]] ?? null
   }
 
-  function cdxHyFor(ts: string): number | null {
+  function cdxHyFor(ts: string, cdx_hy_at_time?: number | null): number | null {
+    if (cdx_hy_at_time != null) return cdx_hy_at_time
     return cdxHyByDate[ts.split('T')[0]] ?? null
   }
 
-  function cdxIgFor(ts: string): number | null {
+  function cdxIgFor(ts: string, cdx_ig_at_time?: number | null): number | null {
+    if (cdx_ig_at_time != null) return cdx_ig_at_time
     return cdxIgByDate[ts.split('T')[0]] ?? null
   }
 
@@ -410,8 +416,8 @@ export default function HistoryPage() {
                 const visibleDealer = showDealer ? (pc.dealer ?? '—') : '—'
                 const dealerColor   = showDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
                 const spx   = spxFor(pc.created_at, pc.spx_at_time)
-                const cdxHy = cdxHyFor(pc.created_at)
-                const cdxIg = cdxIgFor(pc.created_at)
+                const cdxHy = cdxHyFor(pc.created_at, pc.cdx_hy_at_time)
+                const cdxIg = cdxIgFor(pc.created_at, pc.cdx_ig_at_time)
                 return (
                   <tr key={pc.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
                     <td style={{ padding: '3px 12px', color: '#555' }}>{fmtShortDate(pc.created_at)}</td>
@@ -484,7 +490,7 @@ export default function HistoryPage() {
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
                 const spx   = spxFor(t.created_at, t.spx_at_time)
-                const cdxHy = cdxHyFor(t.created_at)
+                const cdxHy = cdxHyFor(t.created_at)  // trades don't store intraday CDX yet
                 const cdxIg = cdxIgFor(t.created_at)
                 return (
                   <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>

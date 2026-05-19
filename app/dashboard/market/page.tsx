@@ -108,7 +108,7 @@ export default function MarketPage() {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      localStorage.setItem('cmbx_market_hidden_cols', JSON.stringify([...next]))
+      localStorage.setItem('cmbx_market_hidden_cols', JSON.stringify(Array.from(next)))
       return next
     })
   }
@@ -301,7 +301,7 @@ export default function MarketPage() {
                           key={rowKey}
                           style={{ background: rowBg, borderBottom: '1px solid #1e1e1e' }}
                         >
-                          <td style={{ padding: '5px 6px 5px 10px', color: '#cccccc', whiteSpace: 'nowrap', width: '88px', fontSize: '12px' }}>
+                          <td style={{ padding: '5px 6px 5px 10px', color: '#ffffff', whiteSpace: 'nowrap', width: '88px', fontSize: '12px', fontWeight: 700 }}>
                             {t.tranche_name}.{s.series_number}
                           </td>
                           {!hiddenCols.has('bid') && (
