@@ -1272,7 +1272,7 @@ export default function BackendPage() {
                     {parsedBulk.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
                         <td style={{ padding: '3px 10px', color: '#888' }}>
-                          {bulkTranche === 'BBB-' ? `BBB-.${r.series}` : `CMBX.${r.series}.${bulkTranche}`}
+                          {`${bulkTranche}.${r.series}`}
                         </td>
                         <td style={{ padding: '3px 10px', color: '#66ff88', textAlign: 'center', fontWeight: 700 }}>{formatPx(r.bid, r.mode)}</td>
                         <td style={{ padding: '3px 4px', color: '#444', textAlign: 'center' }}>/</td>
@@ -1386,7 +1386,7 @@ export default function BackendPage() {
               <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
                 <div>● <strong>Index:</strong> {index}</div>
                 <div>● <strong>Notional Amount:</strong> {notionalFmt}</div>
-                <div>● <strong>Price:</strong> {t.price ?? '—'}</div>
+                <div>● <strong>Price:</strong> {formatPx(t.price, null)}</div>
                 <div>● <strong>Strike/Coupon:</strong> {coupon} basis points ({couponPct}%)</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   ● <strong>Upfront Fee:</strong>
