@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { formatPx } from '@/lib/utils'
 import type { SeriesConfig, TrancheConfig, Dealer, Trade } from '@/lib/types'
 
 type Tab = 'SERIES' | 'TRANCHES' | 'DEALERS' | 'BLOTTER'
@@ -1026,7 +1027,7 @@ export default function AdminPage() {
                       </span>
                     </td>
                     <td className={tdClass + ' text-right text-[#cccccc]'}>
-                      {trade.price != null ? String(trade.price) : '—'}
+                      {formatPx(trade.price, null)}
                     </td>
                     <td className={tdClass + ' text-right text-[#888]'}>
                       {trade.size != null ? String(trade.size) : '—'}

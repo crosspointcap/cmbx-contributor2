@@ -131,7 +131,10 @@ export default function MarketPage() {
     const ch = supabase
       .channel(`market-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prices' }, (payload) => {
+        // Guard: DELETE events have no payload.new — price rows are nulled, not deleted
+        if (payload.eventType === 'DELETE') return
         const p = payload.new as Price
+        if (!p?.series_number) return
         const key = `${p.series_number}:${p.tranche_name}`
         // Merge into existing — preserves mode (and other unchanged cols) if not in the realtime payload
         setPrices(prev => ({ ...prev, [key]: { ...prev[key], ...p } }))
