@@ -281,6 +281,7 @@ export default function BackendPage() {
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
   const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
   const [confirmUpfront, setConfirmUpfront] = useState('')
+  const [confirmSpread, setConfirmSpread] = useState('')
   const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
   const [showBulkInput, setShowBulkInput] = useState(false)
   const [bulkText,      setBulkText]      = useState('')
@@ -534,6 +535,26 @@ export default function BackendPage() {
       stripped === '' ? null :
       is32nds         ? parse32nds(stripped) :
                         (parseFloat(stripped) || null)
+
+    // ── Market protection: a different dealer cannot post a worse price ─────────
+    // Bid: higher is better — block if new bid < existing bid from another dealer
+    // Ask: lower is better — block if new ask > existing ask from another dealer
+    if (numericValue != null) {
+      if (field === 'bid' && existing?.bid != null && existing.bid_dealer && existing.bid_dealer !== dealer) {
+        if (numericValue < existing.bid) {
+          showError(`${existing.bid_dealer} bid ${formatPx(existing.bid, existing.mode)} — ${dealer ?? 'you'} can't post a lower bid`)
+          setEditingCell(null)
+          return
+        }
+      }
+      if (field === 'ask' && existing?.ask != null && existing.ask_dealer && existing.ask_dealer !== dealer) {
+        if (numericValue > existing.ask) {
+          showError(`${existing.ask_dealer} offer ${formatPx(existing.ask, existing.mode)} — ${dealer ?? 'you'} can't post a higher offer`)
+          setEditingCell(null)
+          return
+        }
+      }
+    }
 
     const update: Record<string, unknown> = {
       series_number: seriesNum,
@@ -962,15 +983,15 @@ export default function BackendPage() {
               </button>
               {isPulled ? (
                 <button onClick={() => restoreDealerPrices(code)} title={`Restore ${pulledPrices[code].length} ${code} prices`}
-                  style={{ background: '#0a1a0a', color: '#66ff88', border: '1px solid #336633', padding: '0 4px', fontSize: '9px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '12px', whiteSpace: 'nowrap' }}>
-                  ↩{pulledPrices[code].length}
+                  style={{ background: '#0a2a0a', color: '#66ff88', border: '1px solid #44aa44', padding: '2px 6px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: '0.5px' }}>
+                  ↩ IN ({pulledPrices[code].length})
                 </button>
               ) : count > 0 ? (
                 <button onClick={() => pullDealerPrices(code)} title={`Pull all ${count} ${code} prices`}
-                  style={{ background: 'transparent', color: s?.color + '99', border: `1px solid ${s?.border}44`, padding: '0 4px', fontSize: '9px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', lineHeight: '12px', whiteSpace: 'nowrap' }}>
-                  ↓{count}
+                  style={{ background: '#1a0a0a', color: '#ff8888', border: '1px solid #883333', padding: '2px 6px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: '0.5px' }}>
+                  ↓ OUT ({count})
                 </button>
-              ) : <span style={{ height: '12px' }} />}
+              ) : <span style={{ height: '20px' }} />}
             </div>
           )
         })}
@@ -1069,9 +1090,9 @@ export default function BackendPage() {
                   </td>
                 </tr>
                 {tranches.filter(t => {
-                  if (isCollapsed) return false   // collapsed = header only, no rows
                   const p = prices[`${s.series_number}:${t.tranche_name}`]
                   const hasPrice = p?.bid != null || p?.ask != null
+                  if (isCollapsed) return hasPrice  // collapsed = only show priced rows
                   return showEmptyRows ? true : hasPrice
                 }).map((t, tIdx) => {
                   const rowKey = `${s.series_number}:${t.tranche_name}`
@@ -1216,7 +1237,7 @@ export default function BackendPage() {
                   </div>
                   <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
                     <button
-                      onClick={() => { setConfirmTrade(t); setConfirmUpfront('') }}
+                      onClick={() => { setConfirmTrade(t); setConfirmUpfront(''); setConfirmSpread('') }}
                       style={{ flex: 1, background: '#0f0f00', color: '#f0c040', border: '1px solid #333300', padding: '2px 0', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', letterSpacing: '1px', borderRadius: '2px' }}
                     >
                       VIEW CONFIRM
@@ -1426,7 +1447,19 @@ export default function BackendPage() {
                 <div>● <strong>Price:</strong> {formatPx(t.price, null)}</div>
                 <div>● <strong>Strike/Coupon:</strong> {coupon} basis points ({couponPct}%)</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ● <strong>Upfront Fee:</strong>
+                  ● <strong>Spread:</strong>
+                  <input
+                    className="no-print"
+                    value={confirmSpread}
+                    onChange={e => setConfirmSpread(e.target.value)}
+                    placeholder="enter spread..."
+                    style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
+                  />
+                  {confirmSpread && <span className="print-only" style={{ display: 'none' }}>{confirmSpread}</span>}
+                  <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  ● <strong>Upfront Fee (PV):</strong>
                   <input
                     className="no-print"
                     value={confirmUpfront}
