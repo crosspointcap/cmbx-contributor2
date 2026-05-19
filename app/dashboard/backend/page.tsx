@@ -549,8 +549,12 @@ export default function BackendPage() {
         size:   sz,
         mode,
       }
-      supabase.from('price_changes').insert({ ...baseRow, spx_at_time: latestSpxRef.current })
-        .then(({ error }) => { if (error) console.warn('[price_changes insert failed]', error.message) })
+      supabase.from('price_changes').insert({
+        ...baseRow,
+        spx_at_time:    latestSpxRef.current,
+        cdx_hy_at_time: latestCdxRef.current.hy,
+        cdx_ig_at_time: latestCdxRef.current.ig,
+      }).then(({ error }) => { if (error) console.warn('[price_changes insert failed]', error.message) })
     }
 
     setEditingCell(null)
@@ -678,8 +682,8 @@ export default function BackendPage() {
           mode: r.mode,
         }, { onConflict: 'series_number,tranche_name' })
         supabase.from('price_changes').insert([
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current },
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current },
+          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
+          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
         ]).then(({ error }) => { if (error) console.warn('[bulk price_changes]', error.message) })
       }
       // MS bulk — snapshot CDX HY for every submitted row
