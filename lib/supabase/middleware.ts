@@ -34,10 +34,7 @@ export async function updateSession(request: NextRequest) {
   // and freeze the navigation after login.
   const { data: { session } } = await supabase.auth.getSession()
 
-  console.log('[middleware]', request.nextUrl.pathname, '— session:', session?.user?.id ?? 'none')
-
   if (!session && !request.nextUrl.pathname.startsWith('/login')) {
-    console.log('[middleware] no session — redirecting to /login')
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

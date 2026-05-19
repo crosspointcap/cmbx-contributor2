@@ -371,8 +371,15 @@ export default function BackendPage() {
         } else {
           const p = payload.new as Price
           const key = `${p.series_number}:${p.tranche_name}`
-          // Merge — preserves mode and other unchanged cols absent from realtime payload
-          setPrices(prev => ({ ...prev, [key]: { ...prev[key], ...p } }))
+          // Merge — preserves mode and other unchanged cols absent from realtime payload.
+          // If the incoming payload has mode:null (DB row was null), keep whatever valid
+          // mode we already have in state so prices never revert to decimal display.
+          setPrices(prev => {
+            const existing = prev[key]
+            const merged = { ...existing, ...p }
+            if (!merged.mode && existing?.mode) merged.mode = existing.mode
+            return { ...prev, [key]: merged }
+          })
           // Keep ghost of last non-null bid/ask so cleared prices stay visible in grey
           setGhostPrices(prev => mergeGhost(prev, key, p))
         }
@@ -423,6 +430,18 @@ export default function BackendPage() {
       } catch {}
     }
 
+    // Backfill: corrects cdx_hy_at_time / cdx_ig_at_time on any price_changes or
+    // trades from the last 24h where the stamped value didn't match cdx_intraday.
+    // Runs on load + every 5 minutes so stale or missing values self-heal.
+    async function backfillCdx() {
+      try {
+        const { data, error } = await supabase.rpc('backfill_cdx_prices')
+        if (error) console.warn('[cdx-backfill] rpc error:', error.message)
+      } catch (e) {
+        console.warn('[cdx-backfill] failed:', e)
+      }
+    }
+
     async function loadData() {
       const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
@@ -451,14 +470,17 @@ export default function BackendPage() {
     // Fetch SPX and CDX immediately, then refresh every 5 minutes
     fetchSpx()
     fetchCdx()
-    const spxInterval = setInterval(fetchSpx, 5 * 60 * 1000)
-    const cdxInterval = setInterval(fetchCdx, 5 * 60 * 1000)
+    backfillCdx()   // correct any stale CDX values on load
+    const spxInterval      = setInterval(fetchSpx,    5 * 60 * 1000)
+    const cdxInterval      = setInterval(fetchCdx,    5 * 60 * 1000)
+    const backfillInterval = setInterval(backfillCdx, 5 * 60 * 1000)
 
     loadData()
     return () => {
       cancelled = true
       clearInterval(spxInterval)
       clearInterval(cdxInterval)
+      clearInterval(backfillInterval)
       supabase.removeChannel(ch)
       // Clear all pending timers on unmount
       Object.values(flashTimers.current).forEach(clearTimeout)
@@ -492,6 +514,9 @@ export default function BackendPage() {
       await supabase.from('prices').upsert({
         series_number: seriesNum,
         tranche_name:  trancheName,
+        // Always include mode so the realtime payload never delivers mode:null
+        // and accidentally clears the display format in the frontend
+        ...(existing?.mode ? { mode: existing.mode } : {}),
         [field]: trimmed === '' ? null : trimmed,
       }, { onConflict: 'series_number,tranche_name' })
       setEditingCell(null)
@@ -772,7 +797,7 @@ export default function BackendPage() {
     if (px == null)            { shake(); showError(isHit ? 'No bid posted on this tranche' : 'No offer posted on this tranche'); return }
     if (dealer === passiveDealer) { shake(); showError(`${dealer} cannot ${isHit ? 'hit' : 'lift'} their own price`); return }
 
-    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz, spx_at_time: latestSpxRef.current })
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
     flashRowEffect(rowKey, isHit ? 'red' : 'green')
   }
