@@ -898,6 +898,10 @@ export default function BackendPage() {
           60%{transform:translateX(-4px)}
           80%{transform:translateX(4px)}
         }
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: inline-block !important; }
+        }
       `}</style>
 
       {/* Top bar */}
@@ -1455,7 +1459,9 @@ export default function BackendPage() {
                     placeholder="enter spread..."
                     style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
                   />
-                  {confirmSpread && <span className="print-only" style={{ display: 'none' }}>{confirmSpread}</span>}
+                  <span className="print-only" style={{ display: 'none', borderBottom: '1px solid #333', minWidth: '160px', paddingBottom: '2px', fontSize: '13px' }}>
+                    {confirmSpread}
+                  </span>
                   <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1467,7 +1473,9 @@ export default function BackendPage() {
                     placeholder="enter PV..."
                     style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
                   />
-                  {confirmUpfront && <span className="print-only" style={{ display: 'none' }}>{confirmUpfront}</span>}
+                  <span className="print-only" style={{ display: 'none', borderBottom: '1px solid #333', minWidth: '160px', paddingBottom: '2px', fontSize: '13px' }}>
+                    {confirmUpfront}
+                  </span>
                   <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
                 </div>
                 <div>● <strong>Upfront Fee Payable to:</strong> {t.price != null && t.price > 100 ? riskBuyerInfo?.legal ?? riskBuyerCode : riskSellerInfo?.legal ?? riskSellerCode}</div>
