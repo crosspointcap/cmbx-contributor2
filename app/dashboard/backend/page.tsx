@@ -391,8 +391,12 @@ export default function BackendPage() {
         const row = payload.new as { cdx_hy?: number | null; cdx_ig?: number | null }
         const hy = row.cdx_hy ?? null
         const ig = row.cdx_ig ?? null
+        // Update whichever fields are present — never clobber a live value with null
+        latestCdxRef.current = {
+          hy: hy ?? latestCdxRef.current.hy,
+          ig: ig ?? latestCdxRef.current.ig,
+        }
         if (hy != null) {
-          latestCdxRef.current = { hy, ig: ig ?? latestCdxRef.current.ig }
           setCdxLiveHy(hy)
           applyMsAdjustments(hy)
         }
@@ -411,7 +415,11 @@ export default function BackendPage() {
       try {
         const res = await fetch('/api/cdx')
         const { cdx_hy, cdx_ig } = await res.json()
-        latestCdxRef.current = { hy: cdx_hy ?? null, ig: cdx_ig ?? null }
+        // Only fill null slots — never overwrite live values already set by cdx_intraday
+        latestCdxRef.current = {
+          hy: latestCdxRef.current.hy ?? cdx_hy ?? null,
+          ig: latestCdxRef.current.ig ?? cdx_ig ?? null,
+        }
       } catch {}
     }
 
