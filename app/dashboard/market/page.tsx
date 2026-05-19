@@ -136,8 +136,13 @@ export default function MarketPage() {
         const p = payload.new as Price
         if (!p?.series_number) return
         const key = `${p.series_number}:${p.tranche_name}`
-        // Merge into existing — preserves mode (and other unchanged cols) if not in the realtime payload
-        setPrices(prev => ({ ...prev, [key]: { ...prev[key], ...p } }))
+        // Merge — never let mode:null from a partial payload overwrite a valid mode in state
+        setPrices(prev => {
+          const existing = prev[key]
+          const merged = { ...existing, ...p }
+          if (!merged.mode && existing?.mode) merged.mode = existing.mode
+          return { ...prev, [key]: merged }
+        })
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const t = payload.new as any

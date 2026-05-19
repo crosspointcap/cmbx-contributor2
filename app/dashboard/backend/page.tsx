@@ -371,8 +371,15 @@ export default function BackendPage() {
         } else {
           const p = payload.new as Price
           const key = `${p.series_number}:${p.tranche_name}`
-          // Merge — preserves mode and other unchanged cols absent from realtime payload
-          setPrices(prev => ({ ...prev, [key]: { ...prev[key], ...p } }))
+          // Merge — preserves mode and other unchanged cols absent from realtime payload.
+          // If the incoming payload has mode:null (DB row was null), keep whatever valid
+          // mode we already have in state so prices never revert to decimal display.
+          setPrices(prev => {
+            const existing = prev[key]
+            const merged = { ...existing, ...p }
+            if (!merged.mode && existing?.mode) merged.mode = existing.mode
+            return { ...prev, [key]: merged }
+          })
           // Keep ghost of last non-null bid/ask so cleared prices stay visible in grey
           setGhostPrices(prev => mergeGhost(prev, key, p))
         }
@@ -508,6 +515,9 @@ export default function BackendPage() {
       await supabase.from('prices').upsert({
         series_number: seriesNum,
         tranche_name:  trancheName,
+        // Always include mode so the realtime payload never delivers mode:null
+        // and accidentally clears the display format in the frontend
+        ...(existing?.mode ? { mode: existing.mode } : {}),
         [field]: trimmed === '' ? null : trimmed,
       }, { onConflict: 'series_number,tranche_name' })
       setEditingCell(null)
