@@ -1094,7 +1094,7 @@ export default function BackendPage() {
                       onClick={() => setSelectedRow(prev => prev === rowKey ? null : rowKey)}
                       style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
                     >
-                      <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px' }}>
+                      <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px', fontWeight: 700 }}>
                         {`${t.tranche_name}.${s.series_number}`}
                       </td>
                       {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '3px 8px' })}
