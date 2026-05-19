@@ -108,7 +108,7 @@ export default function MarketPage() {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      localStorage.setItem('cmbx_market_hidden_cols', JSON.stringify([...next]))
+      localStorage.setItem('cmbx_market_hidden_cols', JSON.stringify(Array.from(next)))
       return next
     })
   }
