@@ -437,7 +437,6 @@ export default function BackendPage() {
       try {
         const { data, error } = await supabase.rpc('backfill_cdx_prices')
         if (error) console.warn('[cdx-backfill] rpc error:', error.message)
-        else if (data > 0) console.log(`[cdx-backfill] corrected ${data} rows`)
       } catch (e) {
         console.warn('[cdx-backfill] failed:', e)
       }

@@ -246,8 +246,6 @@ export default function MarketPage() {
 
       {/* Price grid */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-        {/* Price grid */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
