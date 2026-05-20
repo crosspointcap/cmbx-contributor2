@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+// Theme types + localStorage persistence (no auth required)
 
 export interface Theme {
   bg:     string   // main background      default #0a0a0a
@@ -16,37 +16,20 @@ export const DEFAULT_THEME: Theme = {
   ask:    '#ff6666',
 }
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const THEME_KEY = 'cmbx_theme'
 
-/** Load theme for the currently authenticated user.
- *  Returns DEFAULT_THEME if no session or no saved theme. */
-export async function loadTheme(): Promise<Theme> {
+/** Load theme from localStorage. Returns DEFAULT_THEME if nothing saved. */
+export function loadTheme(): Theme {
   try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return DEFAULT_THEME
-    const { data } = await supabase
-      .from('profiles')
-      .select('theme')
-      .eq('id', session.user.id)
-      .single()
-    if (data?.theme && typeof data.theme === 'object') {
-      return { ...DEFAULT_THEME, ...data.theme } as Theme
-    }
+    const raw = localStorage.getItem(THEME_KEY)
+    if (raw) return { ...DEFAULT_THEME, ...JSON.parse(raw) }
   } catch {}
   return DEFAULT_THEME
 }
 
-/** Persist theme for the currently authenticated user. */
-export async function saveTheme(theme: Theme): Promise<void> {
+/** Persist theme to localStorage. */
+export function saveTheme(theme: Theme): void {
   try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    await supabase
-      .from('profiles')
-      .update({ theme })
-      .eq('id', session.user.id)
+    localStorage.setItem(THEME_KEY, JSON.stringify(theme))
   } catch {}
 }

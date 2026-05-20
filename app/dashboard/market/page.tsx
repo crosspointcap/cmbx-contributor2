@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime, isLight } from '../../../lib/utils'
@@ -80,30 +80,16 @@ export default function MarketPage() {
   const [tranches, setTranches] = useState<TrancheConfig[]>([])
   const [prices, setPrices] = useState<Record<string, Price>>({})
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
-  const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
-  const [authReady, setAuthReady] = useState(false)
+  const [myDealerCode] = useState<string | null>(null)
   const [hiddenCols, setHiddenCols] = useState<Set<ColKey>>(new Set())
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [showSettings, setShowSettings] = useState(false)
+  const flashTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  // ── Hard auth — redirect to /login if no session; traders go to /backend ────
+  // ── Load theme + schedule EOD redirect ───────────────────────────────────
   useEffect(() => {
-    async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { window.location.href = '/login'; return }
-      const { data: prof } = await supabase
-        .from('profiles').select('role, dealer_code').eq('id', session.user.id).single()
-      // Traders belong on the backend page — send them there
-      if (prof?.role === 'trader') { window.location.href = '/dashboard/backend'; return }
-      if (prof?.dealer_code) setMyDealerCode(prof.dealer_code)
-      const t = await loadTheme(); setTheme(t)
-      setAuthReady(true)
-    }
-    checkAuth()
-    const cancelEod = scheduleEodLogout(async () => {
-      await supabase.auth.signOut()
-      window.location.href = '/login'
-    })
+    setTheme(loadTheme())
+    const cancelEod = scheduleEodLogout(() => { window.location.href = '/dashboard/backend' })
     return () => cancelEod()
   }, [])
 
@@ -124,17 +110,6 @@ export default function MarketPage() {
       return next
     })
   }
-
-  // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ─────────
-  useEffect(() => {
-    const ch = supabase.channel('platform-presence')
-    ch.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await ch.track({ dealer_code: myDealerCode ?? 'MARKET', page: 'market', online_at: new Date().toISOString() })
-      }
-    })
-    return () => { supabase.removeChannel(ch) }
-  }, [myDealerCode])
 
   // ── Main data channel ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -180,31 +155,28 @@ export default function MarketPage() {
     }
 
     loadData()
-    return () => { cancelled = true; supabase.removeChannel(ch) }
+    return () => {
+      cancelled = true
+      supabase.removeChannel(ch)
+      // Clear any active flash timers on unmount
+      Object.values(flashTimers.current).forEach(clearTimeout)
+    }
   }, [])
 
+  // Flash row for 30 seconds — solid highlight, no blink
   function flashRowEffect(key: string, color: 'red' | 'green') {
-    let count = 0
-    const id = setInterval(() => {
-      setFlashRows(prev => {
-        if (key in prev) {
-          const next = { ...prev }
-          delete next[key]
-          return next
-        }
-        return { ...prev, [key]: color }
-      })
-      count++
-      if (count >= 6) clearInterval(id)
-    }, 250)
+    if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
+    setFlashRows(prev => ({ ...prev, [key]: color }))
+    flashTimers.current[key] = setTimeout(() => {
+      setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
+      delete flashTimers.current[key]
+    }, 30000)
   }
 
-  if (!authReady) return null
-
-  async function handleSaveTheme(t: Theme) {
+  function handleSaveTheme(t: Theme) {
     setTheme(t)
     setShowSettings(false)
-    await saveTheme(t)
+    saveTheme(t)
   }
 
   return (
@@ -213,30 +185,14 @@ export default function MarketPage() {
       {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
         <span style={{ color: theme.accent, fontSize: '14px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX MARKET — CROSSPOINT CAPITAL
         </span>
-        <button
-          onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-          style={{
-            background: 'transparent',
-            color: theme.fg,
-            border: `1px solid ${theme.fg}44`,
-            padding: '2px 8px',
-            fontSize: '13px',
-            fontFamily: 'Courier New, monospace',
-            cursor: 'pointer',
-            borderRadius: '2px',
-            opacity: 0.6,
-          }}
-        >
-          SIGN OUT
-        </button>
       </div>
 
-      {/* Nav tabs — dealers see MARKET + HISTORY only, no ADMIN */}
-      <NavTabs active="market" isTrader={false} accent={theme.accent} onSettings={() => setShowSettings(true)} />
+      {/* Nav tabs */}
+      <NavTabs active="market" isTrader={false} accent={theme.accent} bg={theme.bg} fg={theme.fg} onSettings={() => setShowSettings(true)} />
 
       {/* Column visibility toggles */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderBottom: `1px solid ${theme.fg}18`, flexShrink: 0, background: theme.bg }}>

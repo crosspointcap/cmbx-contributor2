@@ -58,6 +58,7 @@ const MATURITY_DATE: Record<string, string> = {
   '17': 'January 17, 2066',
   '18': 'January 17, 2067',
   '19': 'December 17, 2072',
+  '20': 'January 17, 2073',
 }
 
 const DEALER_INFO: Record<string, { legal: string; address: string; phone?: string; email: string }> = {
@@ -345,32 +346,11 @@ export default function BackendPage() {
   selectedDealerRef.current = selectedDealer
   selectedRowRef.current    = selectedRow
 
-  // Auth check
+  // Load theme + schedule EOD redirect
   useEffect(() => {
-    async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        window.location.href = '/login'
-        return
-      }
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single()
-
-      if (!prof || prof.role !== 'trader') {
-        window.location.href = '/dashboard/market'
-        return
-      }
-      const t = await loadTheme(); setTheme(t)
-      setAuthChecked(true)
-    }
-    checkAuth()
-    const cancelEod = scheduleEodLogout(async () => {
-      await supabase.auth.signOut()
-      window.location.href = '/login'
-    })
+    setTheme(loadTheme())
+    setAuthChecked(true)
+    const cancelEod = scheduleEodLogout(() => { window.location.href = '/dashboard/backend' })
     return () => cancelEod()
   }, [])
 
@@ -422,7 +402,7 @@ export default function BackendPage() {
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const entry = mapTrade(payload.new)
-        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green')
+        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green', 30000)
         setTradeLog(entry)
         setBlotterTrades(prev => [entry, ...prev])
       })
@@ -525,14 +505,14 @@ export default function BackendPage() {
     }
   }, [authChecked])
 
-  function flashRowEffect(key: string, color: 'red' | 'green') {
+  function flashRowEffect(key: string, color: 'red' | 'green', durationMs = 3000) {
     // Clear any existing timer for this row before starting a new one
     if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
     setFlashRows(prev => ({ ...prev, [key]: color }))
     flashTimers.current[key] = setTimeout(() => {
       setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
       delete flashTimers.current[key]
-    }, 20000)
+    }, durationMs)
   }
 
   function handleDealerClick(code: string) {
@@ -860,7 +840,7 @@ export default function BackendPage() {
 
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
-    flashRowEffect(rowKey, isHit ? 'red' : 'green')
+    flashRowEffect(rowKey, isHit ? 'red' : 'green', 30000)
   }
 
   function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties) {
@@ -928,10 +908,10 @@ export default function BackendPage() {
     )
   }
 
-  async function handleSaveTheme(t: Theme) {
+  function handleSaveTheme(t: Theme) {
     setTheme(t)
     setShowSettings(false)
-    await saveTheme(t)
+    saveTheme(t)
   }
 
   return (
@@ -985,21 +965,6 @@ export default function BackendPage() {
             MARKET
           </a>
           <button
-            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-            style={{
-              background: 'transparent',
-              color: '#555',
-              border: '1px solid #2a2a2a',
-              padding: '2px 8px',
-              fontSize: '15px',
-              fontFamily: 'Courier New, monospace',
-              cursor: 'pointer',
-              borderRadius: '2px',
-            }}
-          >
-            SIGN OUT
-          </button>
-          <button
             onClick={() => setShowBlotter(p => !p)}
             style={{
               background: showBlotter ? '#1a1500' : 'transparent',
@@ -1018,7 +983,7 @@ export default function BackendPage() {
       </div>
 
       {/* Nav tabs */}
-      <NavTabs active="admin" isTrader={true} accent={theme.accent} onSettings={() => setShowSettings(true)} />
+      <NavTabs active="admin" isTrader={true} accent={theme.accent} bg={theme.bg} fg={theme.fg} onSettings={() => setShowSettings(true)} />
 
       {/* Dealer + action — single combined row */}
       <div style={{ display: 'flex', alignItems: 'flex-end', padding: '3px 10px', gap: '3px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>

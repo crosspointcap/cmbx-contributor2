@@ -4,23 +4,27 @@ interface NavTabsProps {
   active:       'market' | 'history' | 'admin'
   isTrader:     boolean
   accent?:      string
+  bg?:          string
+  fg?:          string
   onSettings?:  () => void
 }
 
-export function NavTabs({ active, isTrader, accent = '#f0c040', onSettings }: NavTabsProps) {
+export function NavTabs({ active, isTrader, accent = '#f0c040', bg = '#060606', fg = '#ffffff', onSettings }: NavTabsProps) {
   const tabs: { id: string; label: string; href: string }[] = [
     { id: 'market',  label: 'MARKET',  href: '/dashboard/market'  },
     { id: 'history', label: 'HISTORY', href: '/dashboard/history' },
     ...(isTrader ? [{ id: 'admin', label: 'ADMIN', href: '/dashboard/backend' }] : []),
   ]
 
+  const inactiveFg = `${fg}44`
+
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
       padding: '0 12px',
-      background: '#060606',
-      borderBottom: '1px solid #1e1e1e',
+      background: bg,
+      borderBottom: `1px solid ${fg}22`,
       flexShrink: 0,
     }}>
       {tabs.map(tab => {
@@ -36,7 +40,7 @@ export function NavTabs({ active, isTrader, accent = '#f0c040', onSettings }: Na
               letterSpacing: '2px',
               fontFamily: 'Courier New, monospace',
               fontWeight: isActive ? 700 : 400,
-              color: isActive ? accent : '#3a3a3a',
+              color: isActive ? accent : inactiveFg,
               textDecoration: 'none',
               borderBottom: isActive ? `2px solid ${accent}` : '2px solid transparent',
               marginBottom: '-1px',

@@ -80,11 +80,7 @@ function canViewDealerName(priceDealer: string | null, myDealerCode: string | nu
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DATE_INPUT_STYLE: React.CSSProperties = {
-  background: '#111', color: '#aaa', padding: '1px 6px',
-  fontSize: '11px', fontFamily: 'Courier New, monospace',
-  borderRadius: '2px', outline: 'none', colorScheme: 'dark' as any,
-}
+// DATE_INPUT_STYLE is built inside the component so it can use theme-derived colours
 
 export default function HistoryPage() {
   const [quickRange,   setQuickRange]   = useState<QuickRange>('1D')
@@ -102,35 +98,13 @@ export default function HistoryPage() {
 
   const usingCustomRange = !!(customFrom && customTo)
 
-  // ── Check role (soft — no redirect; dealers can view history with limited info) ─
+  // ── Load theme + schedule EOD redirect ───────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return
-      supabase.from('profiles').select('role, dealer_code').eq('id', session.user.id).single()
-        .then(({ data }) => {
-          if (data?.role === 'trader') setIsTrader(true)
-          setMyDealerCode(data?.dealer_code ?? null)
-          loadTheme().then(setTheme)
-        })
-    })
-    const cancelEod = scheduleEodLogout(async () => {
-      await supabase.auth.signOut()
-      window.location.href = '/login'
-    })
+    setIsTrader(true)
+    setTheme(loadTheme())
+    const cancelEod = scheduleEodLogout(() => { window.location.href = '/dashboard/backend' })
     return () => cancelEod()
   }, [])
-
-  // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ──────────
-  useEffect(() => {
-    const dealerCode = myDealerCode ?? 'ANON'
-    const ch = supabase.channel('platform-presence')
-    ch.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await ch.track({ dealer_code: dealerCode, page: 'history', online_at: new Date().toISOString() })
-      }
-    })
-    return () => { supabase.removeChannel(ch) }
-  }, [myDealerCode])
 
   // ── Realtime: stream new entries live ────────────────────────────────────────
   useEffect(() => {
@@ -303,10 +277,10 @@ export default function HistoryPage() {
     })
   }, [trades, q, isTrader, myDealerCode])
 
-  async function handleSaveTheme(t: Theme) {
+  function handleSaveTheme(t: Theme) {
     setTheme(t)
     setShowSettings(false)
-    await saveTheme(t)
+    saveTheme(t)
   }
 
   // ── Contrast-safe derived colours ──────────────────────────────────────────
@@ -315,12 +289,19 @@ export default function HistoryPage() {
   const headerBg  = light ? '#e0e4ea' : '#0c0c0c'
   const rowEven   = light ? 'transparent'  : '#0a0a0a'
   const rowOdd    = light ? '#f0f2f5'      : '#0d0d0d'
-  const dimClr    = light ? '#555555' : '#555555'
+  const dimClr    = light ? '#444444' : '#666666'
   const emptyClr  = light ? '#aaaaaa' : '#2a2a2a'
   const inputBg   = light ? '#ffffff' : '#111'
   const inputBdr  = (active: boolean) => active
     ? `1px solid ${theme.accent}`
     : `1px solid ${light ? '#bbbbbb' : '#2a2a2a'}`
+  const dateInputStyle: React.CSSProperties = {
+    background: inputBg, color: theme.fg, padding: '1px 6px',
+    fontSize: '11px', fontFamily: 'Courier New, monospace',
+    borderRadius: '2px', outline: 'none',
+    colorScheme: (light ? 'light' : 'dark') as any,
+    border: inputBdr(false),
+  }
 
   return (
     <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -328,20 +309,14 @@ export default function HistoryPage() {
       {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
         <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX HISTORY — CROSSPOINT
         </span>
-        <button
-          onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-          style={{ background: 'transparent', color: theme.fg, border: `1px solid ${theme.fg}44`, padding: '2px 8px', fontSize: '13px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', opacity: 0.6 }}
-        >
-          SIGN OUT
-        </button>
       </div>
 
       {/* Nav tabs */}
-      <NavTabs active="history" isTrader={isTrader} accent={theme.accent} onSettings={() => setShowSettings(true)} />
+      <NavTabs active="history" isTrader={isTrader} accent={theme.accent} bg={theme.bg} fg={theme.fg} onSettings={() => setShowSettings(true)} />
 
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0, background: theme.bg, flexWrap: 'wrap' }}>
@@ -365,12 +340,12 @@ export default function HistoryPage() {
         <span style={{ color: theme.fg, fontSize: '11px', letterSpacing: '1px', opacity: 0.5 }}>FROM</span>
         <input
           type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, background: inputBg, color: theme.fg, border: inputBdr(usingCustomRange) }}
+          style={{ ...dateInputStyle, border: inputBdr(usingCustomRange) }}
         />
         <span style={{ color: theme.fg, fontSize: '11px', letterSpacing: '1px', opacity: 0.5 }}>TO</span>
         <input
           type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, background: inputBg, color: theme.fg, border: inputBdr(usingCustomRange) }}
+          style={{ ...dateInputStyle, border: inputBdr(usingCustomRange) }}
         />
         <button
           onClick={handleCustomGo} disabled={!customFrom || !customTo}
@@ -395,7 +370,7 @@ export default function HistoryPage() {
         <input
           type="text" placeholder="tranche · dealer · series..."
           value={searchText} onChange={e => setSearchText(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, background: inputBg, color: theme.fg, border: inputBdr(!!q), width: '190px' }}
+          style={{ ...dateInputStyle, border: inputBdr(!!q), width: '190px' }}
         />
         {q && (
           <button onClick={() => setSearchText('')} style={{ background: 'transparent', color: dimClr, border: 'none', cursor: 'pointer', fontSize: '11px', fontFamily: 'Courier New, monospace', padding: '0 2px' }}>✕</button>
