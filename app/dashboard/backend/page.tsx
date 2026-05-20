@@ -44,20 +44,20 @@ const COUPON_BPS: Record<string, number> = {
 }
 
 const MATURITY_DATE: Record<string, string> = {
-  '6':  'February 17, 2047',
-  '7':  'September 17, 2047',
+  '6':  'May 11, 2063',
+  '7':  'January 17, 2047',
   '8':  'October 17, 2057',
   '9':  'September 17, 2058',
   '10': 'November 17, 2059',
-  '11': 'November 17, 2059',
+  '11': 'November 18, 2054',
   '12': 'August 17, 2061',
-  '13': 'December 17, 2072',
-  '14': 'September 17, 2062',
-  '15': 'November 17, 2064',
-  '16': 'November 17, 2065',
-  '17': 'January 17, 2066',
-  '18': 'January 17, 2067',
-  '19': 'December 17, 2072',
+  '13': 'December 16, 2072',
+  '14': 'December 16, 2072',
+  '15': 'November 18, 2064',
+  '16': 'April 17, 2065',
+  '17': 'December 15, 2056',
+  '18': 'December 18, 2057',
+  '19': 'December 17, 2058',
   '20': 'January 17, 2073',
 }
 
@@ -308,8 +308,6 @@ export default function BackendPage() {
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
   const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
-  const [confirmUpfront, setConfirmUpfront] = useState('')
-  const [confirmSpread, setConfirmSpread] = useState('')
   const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
   const [showBulkInput, setShowBulkInput] = useState(false)
   const [bulkText,      setBulkText]      = useState('')
@@ -1254,7 +1252,7 @@ export default function BackendPage() {
                   </div>
                   <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
                     <button
-                      onClick={() => { setConfirmTrade(t); setConfirmUpfront(''); setConfirmSpread('') }}
+                      onClick={() => { setConfirmTrade(t) }}
                       style={{ flex: 1, background: '#0f0f00', color: '#f0c040', border: '1px solid #333300', padding: '2px 0', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', letterSpacing: '1px', borderRadius: '2px' }}
                     >
                       VIEW CONFIRM
@@ -1400,133 +1398,164 @@ export default function BackendPage() {
       {/* Confirmation Modal */}
       {confirmTrade && (() => {
         const t = confirmTrade
-        const tradeDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: '2-digit' })
-        const coupon = COUPON_BPS[t.tranche] ?? 0
-        const couponPct = (coupon / 100).toFixed(2)
-        const notional = t.trade_size ? t.trade_size * 1_000_000 : null
-        const notionalFmt = notional ? `$${notional.toLocaleString()}` : '—'
-        const maturity = MATURITY_DATE[t.series] ?? '—'
-        const index = `CMBX.NA.${t.tranche}.${t.series}`
-        const feePerMM = FACILITATION_FEE_PER_MM[t.tranche] ?? 115
-        const facFee = notional ? `$${(notional / 1_000_000 * feePerMM).toLocaleString()}` : '—'
 
-        // LIFT: dealer lifts offer → dealer buys risk; passive (offerer) sells risk
-        // HIT:  dealer hits bid   → dealer sells risk; passive (bidder) buys risk
-        const riskBuyerCode  = t.action === 'LIFT' ? t.dealer : (t.passive_dealer ?? '—')
-        const riskSellerCode = t.action === 'LIFT' ? (t.passive_dealer ?? '—') : t.dealer
-        const riskBuyerInfo  = DEALER_INFO[riskBuyerCode]
-        const riskSellerInfo = DEALER_INFO[riskSellerCode]
+        // ── Computed fields ───────────────────────────────────────────────────
+        const tradeDate  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        const coupon     = COUPON_BPS[t.tranche] ?? 0
+        const notional   = t.trade_size ? t.trade_size * 1_000_000 : null
+        const maturity   = MATURITY_DATE[t.series] ?? '—'
+        const index      = `CMBX.NA.${t.tranche}.${t.series}`
+        const feePerMM   = FACILITATION_FEE_PER_MM[t.tranche] ?? 115
+        const facFee     = notional ? `$${(notional / 1_000_000 * feePerMM).toLocaleString()}` : '—'
+        const priceDecimal = t.price != null ? t.price.toFixed(2) : '—'
+
+        // ── Protection Buyer = Seller of Risk (SHORT) ─────────────────────────
+        // HIT:  active dealer hits bid   → active = Protection Buyer (Seller of Risk)
+        //                                  passive = Protection Seller (Buyer of Risk)
+        // LIFT: active dealer lifts ask  → active = Protection Seller (Buyer of Risk)
+        //                                  passive = Protection Buyer (Seller of Risk)
+        const protBuyerCode  = t.action === 'HIT'  ? t.dealer              : (t.passive_dealer ?? '—')
+        const protSellerCode = t.action === 'HIT'  ? (t.passive_dealer ?? '—') : t.dealer
+        const protBuyerInfo  = DEALER_INFO[protBuyerCode]
+        const protSellerInfo = DEALER_INFO[protSellerCode]
+
+        // ── Upfront PV: (100 − Price) / 100 × Notional ───────────────────────
+        // Positive (price < 100): Protection Seller pays to Protection Buyer
+        // Negative (price > 100): Protection Buyer pays to Protection Seller
+        const pvRaw      = (t.price != null && notional) ? ((100 - t.price) / 100) * notional : null
+        const pvFmt      = pvRaw != null ? `$${Math.round(Math.abs(pvRaw)).toLocaleString()}` : '—'
+        const pvCalcStr  = (t.price != null && notional)
+          ? `(100.00 − ${t.price.toFixed(2)}) / 100 × $${notional.toLocaleString()}`
+          : ''
+        // Who pays / receives
+        const upfrontPayer    = pvRaw == null ? '—'
+          : pvRaw >= 0 ? (protSellerInfo?.legal ?? protSellerCode)  // price ≤ 100: Prot Seller pays
+          : (protBuyerInfo?.legal  ?? protBuyerCode)                // price > 100: Prot Buyer pays
+        const upfrontReceiver = pvRaw == null ? '—'
+          : pvRaw >= 0 ? (protBuyerInfo?.legal  ?? protBuyerCode)
+          : (protSellerInfo?.legal ?? protSellerCode)
+
+        const row = (label: string, value: React.ReactNode, shade: boolean) => (
+          <tr style={{ background: shade ? '#f8f9fc' : '#fff' }}>
+            <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>{label}</td>
+            <td style={{ padding: '6px 14px', fontWeight: 500, borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>{value}</td>
+          </tr>
+        )
 
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '20px' }}>
-            <div id="confirm-doc" style={{ background: '#fff', width: '750px', padding: '48px 56px', fontFamily: 'Georgia, serif', fontSize: '13px', color: '#222', lineHeight: '1.6', flexShrink: 0 }}>
+            <div id="confirm-doc" style={{ background: '#fff', width: '760px', padding: '44px 52px', fontFamily: 'Georgia, serif', fontSize: '13px', color: '#222', lineHeight: '1.6', flexShrink: 0 }}>
 
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+              {/* ── Header ───────────────────────────────────────────────────── */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
                 <div>
-                  <div style={{ color: '#2255aa', fontSize: '14px', marginBottom: '2px' }}>CMBX Trade Confirmation</div>
-                  <div style={{ color: '#2255aa', fontSize: '14px' }}>Trade Date: {tradeDate}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#111', marginBottom: '3px' }}>CMBX Trade Confirmation</div>
+                  <div style={{ color: '#666', fontSize: '13px' }}>Trade Date: {tradeDate}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-1px', color: '#111' }}>CROSS<span style={{ color: '#e03020' }}>✕</span>POINT</div>
+                  <div style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-1px', color: '#111' }}>
+                    CROSS<span style={{ color: '#e03020' }}>✕</span>POINT
+                  </div>
                   <div style={{ fontSize: '11px', color: '#888', letterSpacing: '2px' }}>C A P I T A L</div>
                 </div>
               </div>
 
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+              {/* ── Reference banner ─────────────────────────────────────────── */}
+              <div style={{ background: '#f0f4fb', padding: '10px 16px', borderLeft: '4px solid #2255aa', marginBottom: '22px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <span style={{ fontWeight: 700, fontSize: '15px', color: '#2255aa' }}>{index}</span>
+                <span style={{ color: '#555', fontSize: '12px' }}>Maturity: {maturity}</span>
+                <span style={{ color: '#555', fontSize: '12px' }}>Coupon: {coupon} bps/yr</span>
+              </div>
 
-              {/* Parties */}
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Parties to the Transaction:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
-                <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #eee' }}>
-                  <span style={{ fontWeight: 700, color: '#1a6622' }}>● BUYER OF RISK ({riskBuyerCode}):</span><br />
-                  <span style={{ fontWeight: 700 }}>{riskBuyerInfo?.legal ?? riskBuyerCode}</span><br />
-                  {riskBuyerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
-                  {riskBuyerInfo?.phone && <span>Phone: {riskBuyerInfo.phone}<br /></span>}
-                  {riskBuyerInfo && <span>Email: {riskBuyerInfo.email}</span>}
+              {/* ── Parties ──────────────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Parties to the Transaction</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', fontSize: '12.5px', border: '1px solid #e0e0e0' }}>
+                <tbody>
+                  <tr style={{ background: '#fff6f6' }}>
+                    <td style={{ padding: '12px 14px', borderBottom: '1px solid #e0e0e0', width: '210px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, color: '#881111' }}>Protection Buyer</div>
+                      <div style={{ color: '#666', fontSize: '11px', marginTop: '2px' }}>Seller of Risk · Short Credit</div>
+                      <div style={{ color: '#881111', fontSize: '11px', marginTop: '4px' }}>Pays: {coupon} bps/yr running</div>
+                      <div style={{ color: '#1a6622', fontSize: '11px', fontWeight: 700 }}>Receives: upfront PV</div>
+                    </td>
+                    <td style={{ padding: '12px 14px', borderBottom: '1px solid #e0e0e0', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700 }}>{protBuyerInfo?.legal ?? protBuyerCode}</div>
+                      <div style={{ color: '#555', fontSize: '12px' }}>
+                        {protBuyerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                      </div>
+                      {protBuyerInfo?.phone && <div style={{ color: '#555', fontSize: '12px' }}>Tel: {protBuyerInfo.phone}</div>}
+                      {protBuyerInfo?.email && <div style={{ color: '#555', fontSize: '12px' }}>Email: {protBuyerInfo.email}</div>}
+                    </td>
+                  </tr>
+                  <tr style={{ background: '#f6fff6' }}>
+                    <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, color: '#1a6622' }}>Protection Seller</div>
+                      <div style={{ color: '#666', fontSize: '11px', marginTop: '2px' }}>Buyer of Risk · Long Credit</div>
+                      <div style={{ color: '#1a6622', fontSize: '11px', marginTop: '4px', fontWeight: 700 }}>Receives: {coupon} bps/yr running</div>
+                      <div style={{ color: '#881111', fontSize: '11px' }}>Pays: upfront PV</div>
+                    </td>
+                    <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700 }}>{protSellerInfo?.legal ?? protSellerCode}</div>
+                      <div style={{ color: '#555', fontSize: '12px' }}>
+                        {protSellerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                      </div>
+                      {protSellerInfo?.phone && <div style={{ color: '#555', fontSize: '12px' }}>Tel: {protSellerInfo.phone}</div>}
+                      {protSellerInfo?.email && <div style={{ color: '#555', fontSize: '12px' }}>Email: {protSellerInfo.email}</div>}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* ── Trade Terms ───────────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Trade Terms</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', border: '1px solid #e0e0e0' }}>
+                <tbody>
+                  {row('Index', index, false)}
+                  {row('Trade Type', 'Credit Default Swap (CDS) — ISDA Standard Terms', true)}
+                  {row('Notional Amount', notional ? `$${notional.toLocaleString()}` : '—', false)}
+                  {row('Trade Price', priceDecimal, true)}
+                  {row('Coupon (Running)', `${coupon} bps per annum (${(coupon / 100).toFixed(2)}% / year)`, false)}
+                  {row('Maturity Date', maturity, true)}
+                  {row('Effective Date', tradeDate, false)}
+                </tbody>
+              </table>
+
+              {/* ── Upfront Payment ───────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Upfront Payment (Present Value)</div>
+              <div style={{ border: '1px solid #d0d8ee', background: '#f4f7fb', padding: '14px 18px', marginBottom: '22px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                  <span style={{ color: '#444', fontSize: '12.5px' }}>PV Amount:</span>
+                  <span style={{ fontWeight: 700, fontSize: '18px', color: '#111' }}>{pvFmt}</span>
                 </div>
-                <div>
-                  <span style={{ fontWeight: 700, color: '#881111' }}>● SELLER OF RISK ({riskSellerCode}):</span><br />
-                  <span style={{ fontWeight: 700 }}>{riskSellerInfo?.legal ?? riskSellerCode}</span><br />
-                  {riskSellerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
-                  {riskSellerInfo?.phone && <span>Phone: {riskSellerInfo.phone}<br /></span>}
-                  {riskSellerInfo && <span>Email: {riskSellerInfo.email}</span>}
+                {pvCalcStr && (
+                  <div style={{ color: '#888', fontSize: '11px', marginBottom: '10px', fontFamily: 'Courier New, monospace' }}>
+                    {pvCalcStr}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '4px', fontSize: '12.5px' }}>
+                  <span style={{ color: '#555' }}>Payable by:</span>
+                  <span style={{ fontWeight: 600, color: '#881111' }}>{upfrontPayer}</span>
+                  <span style={{ color: '#555' }}>Payable to:</span>
+                  <span style={{ fontWeight: 600, color: '#1a6622' }}>{upfrontReceiver}</span>
                 </div>
               </div>
 
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+              {/* ── Facilitation Fee ──────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Facilitation Fee</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', border: '1px solid #e0e0e0' }}>
+                <tbody>
+                  {row('Charged by', 'Crosspoint Capital', false)}
+                  {row('Amount', facFee, true)}
+                </tbody>
+              </table>
 
-              {/* Trade Details */}
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Trade Details:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
-                <div>● <strong>Index:</strong> {index}</div>
-                <div>● <strong>Notional Amount:</strong> {notionalFmt}</div>
-                <div>● <strong>Price:</strong> {formatPx(t.price, null)}</div>
-                <div>● <strong>Strike/Coupon:</strong> {coupon} basis points ({couponPct}%)</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ● <strong>Spread:</strong>
-                  <input
-                    className="no-print"
-                    value={confirmSpread}
-                    onChange={e => setConfirmSpread(e.target.value)}
-                    placeholder="enter spread..."
-                    style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
-                  />
-                  <span className="print-only" style={{ display: 'none', borderBottom: '1px solid #333', minWidth: '160px', paddingBottom: '2px', fontSize: '13px' }}>
-                    {confirmSpread}
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ● <strong>Upfront Fee (PV):</strong>
-                  <input
-                    className="no-print"
-                    value={confirmUpfront}
-                    onChange={e => setConfirmUpfront(e.target.value)}
-                    placeholder="enter PV..."
-                    style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
-                  />
-                  <span className="print-only" style={{ display: 'none', borderBottom: '1px solid #333', minWidth: '160px', paddingBottom: '2px', fontSize: '13px' }}>
-                    {confirmUpfront}
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
-                </div>
-                <div>● <strong>Upfront Fee Payable to:</strong> {t.price != null && t.price > 100 ? riskBuyerInfo?.legal ?? riskBuyerCode : riskSellerInfo?.legal ?? riskSellerCode}</div>
+              {/* ── Footer ───────────────────────────────────────────────────── */}
+              <div style={{ fontSize: '11.5px', color: '#555', lineHeight: '1.7', marginBottom: '24px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
+                This document confirms the terms agreed between <strong>{protBuyerInfo?.legal ?? protBuyerCode}</strong> (Protection Buyer) and <strong>{protSellerInfo?.legal ?? protSellerCode}</strong> (Protection Seller) for the {index} trade executed on <strong>{tradeDate}</strong>. All terms are subject to the ISDA Master Agreement and related Schedule executed between the parties. Settlement T+3 business days.
               </div>
 
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Trade Type:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● Credit Default Swap (CDS)</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Effective Date:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {tradeDate}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Maturity Date:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {maturity}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Reference Obligation:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {index}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Facilitation Fee:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● Charged by Crosspoint Capital: {facFee}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ fontSize: '12px', color: '#444', marginBottom: '24px' }}>
-                This document serves as an official confirmation of the terms agreed upon between <strong>{riskBuyerInfo?.legal ?? riskBuyerCode}</strong> (as the Buyer of Risk) and <strong>{riskSellerInfo?.legal ?? riskSellerCode}</strong> (as the Seller of Risk) for the {index} tranche trade executed on <strong>{tradeDate}</strong>. All terms are subject to the provisions of the ISDA Master Agreement and related confirmations executed between the parties.
-              </div>
-
-              {/* Buttons */}
-              <div className="no-print" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              {/* ── Buttons ──────────────────────────────────────────────────── */}
+              <div className="no-print" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button
                   onClick={() => window.print()}
                   style={{ background: '#2255aa', color: '#fff', border: 'none', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', letterSpacing: '1px' }}
@@ -1540,6 +1569,7 @@ export default function BackendPage() {
                   CLOSE
                 </button>
               </div>
+
             </div>
           </div>
         )
