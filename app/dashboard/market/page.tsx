@@ -6,6 +6,7 @@ import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime } from '../../../lib/utils' // fmtTime used for last_trade_time column
 import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
+import { scheduleEodLogout } from '../../../lib/eod-logout'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -98,6 +99,11 @@ export default function MarketPage() {
       setAuthReady(true)
     }
     checkAuth()
+    const cancelEod = scheduleEodLogout(async () => {
+      await supabase.auth.signOut()
+      window.location.href = '/login'
+    })
+    return () => cancelEod()
   }, [])
 
   // ── Column visibility — persist to localStorage ───────────────────────────

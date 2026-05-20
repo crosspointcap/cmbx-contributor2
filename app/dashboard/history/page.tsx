@@ -6,6 +6,7 @@ import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime, fmtShortDate } from '../../../lib/utils'
 import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
+import { scheduleEodLogout } from '../../../lib/eod-logout'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -112,6 +113,11 @@ export default function HistoryPage() {
           loadTheme().then(setTheme)
         })
     })
+    const cancelEod = scheduleEodLogout(async () => {
+      await supabase.auth.signOut()
+      window.location.href = '/login'
+    })
+    return () => cancelEod()
   }, [])
 
   // ── Presence: announce this viewer to the admin WHO'S ONLINE panel ──────────

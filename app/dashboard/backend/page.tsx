@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { fmt32nds, formatPx, fmtTime, parse32nds, buildGhostMap, mergeGhost, GhostMap } from '../../../lib/utils'
 import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
+import { scheduleEodLogout } from '../../../lib/eod-logout'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -366,6 +367,11 @@ export default function BackendPage() {
       setAuthChecked(true)
     }
     checkAuth()
+    const cancelEod = scheduleEodLogout(async () => {
+      await supabase.auth.signOut()
+      window.location.href = '/login'
+    })
+    return () => cancelEod()
   }, [])
 
   useEffect(() => {
