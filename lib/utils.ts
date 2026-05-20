@@ -1,5 +1,10 @@
 // Shared formatting utilities used across dashboard pages
 
+/** True when a hex background colour is closer to white than black (R channel > 127) */
+export function isLight(hex: string): boolean {
+  return parseInt((hex ?? '#000').replace('#', '').slice(0, 2), 16) > 127
+}
+
 // Ghost prices: last known non-null bid/ask per row, shown in grey when live price is cleared
 export type GhostMap = Record<string, { bid?: number; ask?: number; mode?: string | null }>
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { formatPx, fmtTime } from '../../../lib/utils' // fmtTime used for last_trade_time column
+import { formatPx, fmtTime, isLight } from '../../../lib/utils'
 import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
 import { scheduleEodLogout } from '../../../lib/eod-logout'
@@ -63,10 +63,6 @@ function priceColor(priceDealer: string | null, myDealer: string | null, hasPric
   return fg                                                   // all others → theme text colour
 }
 
-/** True when the theme background is a light colour (> 50% brightness on R channel) */
-function isLight(hex: string): boolean {
-  return parseInt(hex.replace('#', '').slice(0, 2), 16) > 127
-}
 
 type ColKey = 'bid' | 'ask' | 'bsz' | 'asz' | 'lastpx' | 'time'
 
@@ -217,7 +213,7 @@ export default function MarketPage() {
       {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
         <span style={{ color: theme.accent, fontSize: '14px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX MARKET — CROSSPOINT CAPITAL
         </span>
@@ -225,13 +221,14 @@ export default function MarketPage() {
           onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
           style={{
             background: 'transparent',
-            color: '#555',
-            border: '1px solid #2a2a2a',
+            color: theme.fg,
+            border: `1px solid ${theme.fg}44`,
             padding: '2px 8px',
             fontSize: '13px',
             fontFamily: 'Courier New, monospace',
             cursor: 'pointer',
             borderRadius: '2px',
+            opacity: 0.6,
           }}
         >
           SIGN OUT
@@ -329,8 +326,8 @@ export default function MarketPage() {
                       const flash = flashRows[rowKey]
 
                       let rowBg = tIdx % 2 === 1 ? oddRowBg : 'transparent'
-                      if (flash === 'red')   rowBg = '#3a0000'
-                      if (flash === 'green') rowBg = '#003a00'
+                      if (flash === 'red')   rowBg = light ? '#ffdddd' : '#3a0000'
+                      if (flash === 'green') rowBg = light ? '#ddffdd' : '#003a00'
 
                       const bidColor = priceColor(price?.bid_dealer ?? null, myDealerCode, price?.bid != null, theme.fg)
                       const askColor = priceColor(price?.ask_dealer ?? null, myDealerCode, price?.ask != null, theme.fg)

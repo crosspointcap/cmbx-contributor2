@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { formatPx, fmtTime, fmtShortDate } from '../../../lib/utils'
+import { formatPx, fmtTime, fmtShortDate, isLight } from '../../../lib/utils'
 import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
 import { scheduleEodLogout } from '../../../lib/eod-logout'
@@ -309,19 +309,32 @@ export default function HistoryPage() {
     await saveTheme(t)
   }
 
+  // ── Contrast-safe derived colours ──────────────────────────────────────────
+  const light     = isLight(theme.bg)
+  const borderClr = light ? '#cccccc' : '#1a1a1a'
+  const headerBg  = light ? '#e0e4ea' : '#0c0c0c'
+  const rowEven   = light ? 'transparent'  : '#0a0a0a'
+  const rowOdd    = light ? '#f0f2f5'      : '#0d0d0d'
+  const dimClr    = light ? '#555555' : '#555555'
+  const emptyClr  = light ? '#aaaaaa' : '#2a2a2a'
+  const inputBg   = light ? '#ffffff' : '#111'
+  const inputBdr  = (active: boolean) => active
+    ? `1px solid ${theme.accent}`
+    : `1px solid ${light ? '#bbbbbb' : '#2a2a2a'}`
+
   return (
     <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
       {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
         <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX HISTORY — CROSSPOINT
         </span>
         <button
           onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-          style={{ background: 'transparent', color: '#555', border: '1px solid #2a2a2a', padding: '2px 8px', fontSize: '13px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}
+          style={{ background: 'transparent', color: theme.fg, border: `1px solid ${theme.fg}44`, padding: '2px 8px', fontSize: '13px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', opacity: 0.6 }}
         >
           SIGN OUT
         </button>
@@ -331,131 +344,131 @@ export default function HistoryPage() {
       <NavTabs active="history" isTrader={isTrader} accent={theme.accent} onSettings={() => setShowSettings(true)} />
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, background: '#080808', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0, background: theme.bg, flexWrap: 'wrap' }}>
 
         {/* Quick range */}
-        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>RANGE</span>
+        <span style={{ color: theme.fg, fontSize: '11px', letterSpacing: '1px', opacity: 0.5 }}>RANGE</span>
         {QUICK_RANGES.map(r => (
           <button key={r} onClick={() => handleQuickRange(r)} style={{
             background: !usingCustomRange && quickRange === r ? theme.accent + '22' : 'transparent',
-            color:      !usingCustomRange && quickRange === r ? theme.accent : '#3a3a3a',
-            border:    `1px solid ${!usingCustomRange && quickRange === r ? theme.accent : '#222'}`,
+            color:      !usingCustomRange && quickRange === r ? theme.accent : dimClr,
+            border:    `1px solid ${!usingCustomRange && quickRange === r ? theme.accent : borderClr}`,
             fontWeight: !usingCustomRange && quickRange === r ? 700 : 400,
             padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
             cursor: 'pointer', borderRadius: '2px',
           }}>{r}</button>
         ))}
 
-        <span style={{ color: '#2a2a2a', padding: '0 2px' }}>|</span>
+        <span style={{ color: theme.fg, padding: '0 2px', opacity: 0.2 }}>|</span>
 
         {/* Custom date range */}
-        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>FROM</span>
+        <span style={{ color: theme.fg, fontSize: '11px', letterSpacing: '1px', opacity: 0.5 }}>FROM</span>
         <input
           type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? theme.accent : '#2a2a2a'}` }}
+          style={{ ...DATE_INPUT_STYLE, background: inputBg, color: theme.fg, border: inputBdr(usingCustomRange) }}
         />
-        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>TO</span>
+        <span style={{ color: theme.fg, fontSize: '11px', letterSpacing: '1px', opacity: 0.5 }}>TO</span>
         <input
           type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? theme.accent : '#2a2a2a'}` }}
+          style={{ ...DATE_INPUT_STYLE, background: inputBg, color: theme.fg, border: inputBdr(usingCustomRange) }}
         />
         <button
           onClick={handleCustomGo} disabled={!customFrom || !customTo}
           style={{
             background: customFrom && customTo ? theme.accent + '22' : 'transparent',
-            color:      customFrom && customTo ? theme.accent : '#333',
-            border:    `1px solid ${customFrom && customTo ? theme.accent : '#222'}`,
+            color:      customFrom && customTo ? theme.accent : dimClr,
+            border:    `1px solid ${customFrom && customTo ? theme.accent : borderClr}`,
             padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
             cursor: customFrom && customTo ? 'pointer' : 'default', borderRadius: '2px',
           }}
         >GO</button>
         {usingCustomRange && (
-          <button onClick={handleClearCustom} style={{ background: 'transparent', color: '#555', border: '1px solid #222', padding: '2px 8px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}>
+          <button onClick={handleClearCustom} style={{ background: 'transparent', color: dimClr, border: `1px solid ${borderClr}`, padding: '2px 8px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}>
             ✕ CLEAR
           </button>
         )}
 
-        <span style={{ color: '#2a2a2a', padding: '0 2px' }}>|</span>
+        <span style={{ color: theme.fg, padding: '0 2px', opacity: 0.2 }}>|</span>
 
         {/* Search */}
-        <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>SEARCH</span>
+        <span style={{ color: theme.fg, fontSize: '11px', letterSpacing: '1px', opacity: 0.5 }}>SEARCH</span>
         <input
           type="text" placeholder="tranche · dealer · series..."
           value={searchText} onChange={e => setSearchText(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${q ? '#555' : '#2a2a2a'}`, width: '190px', color: q ? '#ccc' : '#555' }}
+          style={{ ...DATE_INPUT_STYLE, background: inputBg, color: theme.fg, border: inputBdr(!!q), width: '190px' }}
         />
         {q && (
-          <button onClick={() => setSearchText('')} style={{ background: 'transparent', color: '#555', border: 'none', cursor: 'pointer', fontSize: '11px', fontFamily: 'Courier New, monospace', padding: '0 2px' }}>✕</button>
+          <button onClick={() => setSearchText('')} style={{ background: 'transparent', color: dimClr, border: 'none', cursor: 'pointer', fontSize: '11px', fontFamily: 'Courier New, monospace', padding: '0 2px' }}>✕</button>
         )}
 
-        {loading && <span style={{ color: '#3a3a3a', fontSize: '11px', marginLeft: '4px' }}>LOADING...</span>}
+        {loading && <span style={{ color: dimClr, fontSize: '11px', marginLeft: '4px' }}>LOADING...</span>}
       </div>
 
       {/* Tables */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
         {/* Price Activity */}
-        <div style={{ flex: '0 0 50%', overflow: 'auto', borderBottom: '1px solid #1a1a1a' }}>
-          <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>PRICE ACTIVITY</span>
-            <span style={{ color: '#3a3a3a', fontSize: '11px' }}>{filteredPriceChanges.length} entries</span>
+        <div style={{ flex: '0 0 50%', overflow: 'auto', borderBottom: `1px solid ${borderClr}` }}>
+          <div style={{ position: 'sticky', top: 0, background: headerBg, padding: '5px 12px', borderBottom: `1px solid ${borderClr}`, zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: theme.accent, fontSize: '11px', letterSpacing: '2px' }}>PRICE ACTIVITY</span>
+            <span style={{ color: dimClr, fontSize: '11px' }}>{filteredPriceChanges.length} entries</span>
             {q && filteredPriceChanges.length !== priceChanges.length && (
-              <span style={{ color: '#444', fontSize: '10px' }}>({priceChanges.length} total)</span>
+              <span style={{ color: dimClr, fontSize: '10px' }}>({priceChanges.length} total)</span>
             )}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
-              <tr style={{ color: '#fff', fontSize: '12px', position: 'sticky', top: '26px', background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-                <th style={{ textAlign: 'left',   padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
-                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
-                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DLR</th>
-                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
-                <th style={{ textAlign: 'center', padding: '4px 6px',  borderBottom: '2px solid #888',    fontWeight: 700 }}>SIDE</th>
-                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SPREAD</th>
-                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SZ</th>
+              <tr style={{ color: theme.fg, fontSize: '12px', position: 'sticky', top: '26px', background: theme.bg, zIndex: 1 } as React.CSSProperties}>
+                <th style={{ textAlign: 'left',   padding: '4px 12px', borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>DATE</th>
+                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>TIME</th>
+                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>DLR</th>
+                <th style={{ textAlign: 'left',   padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>TRANCHE</th>
+                <th style={{ textAlign: 'center', padding: '4px 6px',  borderBottom: `2px solid ${theme.fg}44`, fontWeight: 700 }}>SIDE</th>
+                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>SPREAD</th>
+                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>SZ</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY PX</th>
                 <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #88ccaa', fontWeight: 700 }}>CDX IG</th>
-                {isTrader && <th style={{ padding: '4px 8px', borderBottom: '1px solid #1a1a1a' }} />}
+                {isTrader && <th style={{ padding: '4px 8px', borderBottom: `1px solid ${borderClr}` }} />}
               </tr>
             </thead>
             <tbody>
               {filteredPriceChanges.length === 0 ? (
-                <tr><td colSpan={isTrader ? 11 : 10} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 11 : 10} style={{ padding: '24px 12px', color: emptyClr, textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no price activity for selected range'}
                 </td></tr>
               ) : filteredPriceChanges.map((pc, i) => {
                 const showDealer    = canViewDealerName(pc.dealer, myDealerCode, isTrader)
                 const visibleDealer = showDealer ? (pc.dealer ?? '—') : '—'
-                const dealerColor   = showDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? '#888') : '#333'
+                const dealerColor   = showDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? dimClr) : emptyClr
                 const spx   = spxFor(pc.created_at, pc.spx_at_time)
                 const cdxHy = cdxHyFor(pc.created_at, pc.cdx_hy_at_time)
                 const cdxIg = cdxIgFor(pc.created_at, pc.cdx_ig_at_time)
                 return (
-                  <tr key={pc.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtShortDate(pc.created_at)}</td>
-                    <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(pc.created_at)}</td>
+                  <tr key={pc.id} style={{ background: i % 2 === 0 ? rowEven : rowOdd, borderBottom: `1px solid ${borderClr}` }}>
+                    <td style={{ padding: '3px 12px', color: dimClr }}>{fmtShortDate(pc.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: dimClr }}>{fmtTime(pc.created_at)}</td>
                     <td style={{ padding: '3px 6px',  color: dealerColor, fontWeight: 700 }}>{visibleDealer}</td>
-                    <td style={{ padding: '3px 6px',  color: '#aaa' }}>{pc.tranche_name}.{pc.series_number}</td>
-                    <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? '#66ff88' : '#ff6666', fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
-                    <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#fff' }}>{formatPx(pc.price, pc.mode)}</td>
-                    <td style={{ textAlign: 'right',  padding: '3px 6px',  color: '#666' }}>{pc.size ?? '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                    <td style={{ padding: '3px 6px',  color: theme.fg }}>{pc.tranche_name}.{pc.series_number}</td>
+                    <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? theme.bid : theme.ask, fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
+                    <td style={{ textAlign: 'right',  padding: '3px 6px', color: theme.fg, fontWeight: 700 }}>{formatPx(pc.price, pc.mode)}</td>
+                    <td style={{ textAlign: 'right',  padding: '3px 6px', color: dimClr }}>{pc.size ?? '—'}</td>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : emptyClr }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : '#2a2a2a' }}>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : emptyClr }}>
                       {cdxHy != null ? `$${cdxHy.toFixed(2)}` : '—'}
                     </td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : '#2a2a2a' }}>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : emptyClr }}>
                       {cdxIg != null ? cdxIg.toFixed(2) : '—'}
                     </td>
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
                         <button
                           onClick={e => { e.stopPropagation(); deletePriceChange(pc.id) }}
-                          style={{ background: 'transparent', border: 'none', color: '#442222', cursor: 'pointer', fontSize: '13px', padding: '0 4px', fontFamily: 'Courier New', lineHeight: 1 }}
+                          style={{ background: 'transparent', border: 'none', color: emptyClr, cursor: 'pointer', fontSize: '13px', padding: '0 4px', fontFamily: 'Courier New', lineHeight: 1 }}
                           onMouseEnter={e => (e.currentTarget.style.color = '#ff4444')}
-                          onMouseLeave={e => (e.currentTarget.style.color = '#442222')}
+                          onMouseLeave={e => (e.currentTarget.style.color = emptyClr)}
                         >×</button>
                       </td>
                     )}
@@ -468,21 +481,21 @@ export default function HistoryPage() {
 
         {/* Trade Log */}
         <div style={{ flex: 1, overflow: 'auto' }}>
-          <div style={{ position: 'sticky', top: 0, background: '#0c0c0c', padding: '5px 12px', borderBottom: '1px solid #1e1e1e', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '2px' }}>TRADE LOG</span>
-            <span style={{ color: '#3a3a3a', fontSize: '11px' }}>{filteredTrades.length} trades</span>
+          <div style={{ position: 'sticky', top: 0, background: headerBg, padding: '5px 12px', borderBottom: `1px solid ${borderClr}`, zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: theme.accent, fontSize: '11px', letterSpacing: '2px' }}>TRADE LOG</span>
+            <span style={{ color: dimClr, fontSize: '11px' }}>{filteredTrades.length} trades</span>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
-              <tr style={{ color: '#fff', fontSize: '12px', position: 'sticky', top: '26px', background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
-                <th style={{ textAlign: 'left',  padding: '4px 12px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>DATE</th>
-                <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TIME</th>
-                <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>TRANCHE</th>
-                {isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>BUYER</th>}
-                {isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SELLER</th>}
-                {!isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>CPTY</th>}
-                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #f0c040', fontWeight: 700 }}>SPREAD</th>
-                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '1px solid #1a1a1a', fontWeight: 700 }}>SZ</th>
+              <tr style={{ color: theme.fg, fontSize: '12px', position: 'sticky', top: '26px', background: theme.bg, zIndex: 1 } as React.CSSProperties}>
+                <th style={{ textAlign: 'left',  padding: '4px 12px', borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>DATE</th>
+                <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>TIME</th>
+                <th style={{ textAlign: 'left',  padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>TRANCHE</th>
+                {isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>BUYER</th>}
+                {isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>SELLER</th>}
+                {!isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>CPTY</th>}
+                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: `2px solid ${theme.accent}`, fontWeight: 700 }}>SPREAD</th>
+                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>SZ</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY PX</th>
                 <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #88ccaa', fontWeight: 700 }}>CDX IG</th>
@@ -490,15 +503,12 @@ export default function HistoryPage() {
             </thead>
             <tbody>
               {filteredTrades.length === 0 ? (
-                <tr><td colSpan={isTrader ? 10 : 9} style={{ padding: '24px 12px', color: '#2a2a2a', textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 10 : 9} style={{ padding: '24px 12px', color: emptyClr, textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
                 </td></tr>
               ) : filteredTrades.map((t, i) => {
-                // isInvolved = this viewer is a party to this specific trade
                 const isInvolved = myDealerCode != null &&
                   (t.dealer === myDealerCode || t.passive_dealer === myDealerCode)
-                // Traders see buyer + seller columns; everyone else sees CPTY
-                // Names only shown when trader OR directly involved in the trade
                 const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
@@ -506,28 +516,28 @@ export default function HistoryPage() {
                 const cdxHy = cdxHyFor(t.created_at, t.cdx_hy_at_time)
                 const cdxIg = cdxIgFor(t.created_at, t.cdx_ig_at_time)
                 return (
-                  <tr key={t.id} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                    <td style={{ padding: '3px 12px', color: '#555' }}>{fmtShortDate(t.created_at)}</td>
-                    <td style={{ padding: '3px 6px',  color: '#444' }}>{fmtTime(t.created_at)}</td>
-                    <td style={{ padding: '3px 6px',  color: '#fff' }}>{t.tranche_name}.{t.series_number}</td>
-                    {isTrader && <td style={{ padding: '3px 6px', color: '#66ff88', fontWeight: 700 }}>{buyer ?? '—'}</td>}
-                    {isTrader && <td style={{ padding: '3px 6px', color: '#ff6666', fontWeight: 700 }}>{seller ?? '—'}</td>}
+                  <tr key={t.id} style={{ background: i % 2 === 0 ? rowEven : rowOdd, borderBottom: `1px solid ${borderClr}` }}>
+                    <td style={{ padding: '3px 12px', color: dimClr }}>{fmtShortDate(t.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: dimClr }}>{fmtTime(t.created_at)}</td>
+                    <td style={{ padding: '3px 6px',  color: theme.fg, fontWeight: 700 }}>{t.tranche_name}.{t.series_number}</td>
+                    {isTrader && <td style={{ padding: '3px 6px', color: theme.bid, fontWeight: 700 }}>{buyer ?? '—'}</td>}
+                    {isTrader && <td style={{ padding: '3px 6px', color: theme.ask, fontWeight: 700 }}>{seller ?? '—'}</td>}
                     {!isTrader && (
-                      <td style={{ padding: '3px 6px', color: isInvolved ? (DEALER_COLORS[cpty ?? ''] ?? '#888') : '#2a2a2a', fontWeight: isInvolved ? 700 : 400 }}>
+                      <td style={{ padding: '3px 6px', color: isInvolved ? (DEALER_COLORS[cpty ?? ''] ?? dimClr) : emptyClr, fontWeight: isInvolved ? 700 : 400 }}>
                         {isInvolved ? (cpty ?? '—') : '—'}
                       </td>
                     )}
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: '#f0c040', fontWeight: 700 }}>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: theme.accent, fontWeight: 700 }}>
                       {formatPx(t.price, null)}
                     </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px',  color: '#666' }}>{t.trade_size ?? '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : '#2a2a2a' }}>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: dimClr }}>{t.trade_size ?? '—'}</td>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : emptyClr }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
                     </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : '#2a2a2a' }}>
+                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : emptyClr }}>
                       {cdxHy != null ? `$${cdxHy.toFixed(2)}` : '—'}
                     </td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : '#2a2a2a' }}>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : emptyClr }}>
                       {cdxIg != null ? cdxIg.toFixed(2) : '—'}
                     </td>
                   </tr>
