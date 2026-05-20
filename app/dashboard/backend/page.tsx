@@ -213,43 +213,67 @@ function mapTrade(t: any): BlotterTrade {
   }
 }
 
-// Parse pasted bulk price text. Supports two formats:
-//   Format A (SERIES BID/ASK): "-19 92-12/93-00"   ← primary format
-//   Format B (BID/ASK SERIES): "84-24/85-24 -15"   ← legacy format
-// Series can be positive or negative (abs value used). Supports 32nds, dollar, or spread.
-function parseBulkLines(text: string): Array<{ series: string; bid: number; ask: number; mode: string }> {
-  const results: Array<{ series: string; bid: number; ask: number; mode: string }> = []
+// ── Bulk price parser ─────────────────────────────────────────────────────
+// Flexible format — any token containing '/' is a price, any plain integer
+// (or t-prefixed integer) is a series number. Tokens are paired in order.
+//
+// Supported per-line formats:
+//   Full:      "91-20/92-04 -18"     bid+ask, series at end
+//              "-18 91-20/92-04"     bid+ask, series at start
+//   Bid only:  "92-06/ -19"          bid only (ask side blank)
+//   Ask only:  "/91-26 -18"          ask only (bid side blank)
+//   Multi:     "/91-26 /85-18 -18 -17"  two ask-only rows on one line
+//   t-prefix:  "60/ t16"             series written as t16 → series 16
+//   Modes:     32nds (92-06), dollar ($85.50), spread (285)
+
+function _parsePriceTok(tok: string): { bid: number | null; ask: number | null; mode: string } | null {
+  const slashIdx = tok.indexOf('/')
+  if (slashIdx === -1) return null
+  const bidStr = tok.slice(0, slashIdx).trim()
+  const askStr = tok.slice(slashIdx + 1).trim()
+  const sample = (bidStr || askStr).replace('$', '')
+  if (!sample) return null
+  const mode = /^\d+-\d{1,2}$/.test(sample) ? 'ticks'
+             : (bidStr || askStr).startsWith('$') ? 'price'
+             : 'spread'
+  const parsePx = (s: string): number | null => {
+    if (!s) return null
+    const clean = s.replace('$', '').trim()
+    if (!clean) return null
+    return mode === 'ticks' ? parse32nds(clean) : (parseFloat(clean) || null)
+  }
+  const bid = parsePx(bidStr)
+  const ask = parsePx(askStr)
+  if (bid == null && ask == null) return null
+  return { bid, ask, mode }
+}
+
+function parseBulkLines(text: string): Array<{ series: string; bid: number | null; ask: number | null; mode: string }> {
+  const results: Array<{ series: string; bid: number | null; ask: number | null; mode: string }> = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (!line) continue
-
-    let bidStr: string, askStr: string, seriesPart: string
-
-    // Format A: SERIES BID/ASK  e.g. "-19 92-12/93-00"
-    const mA = line.match(/^(-?\d+)\s+(\S+)\/(\S+)$/)
-    // Format B: BID/ASK SERIES  e.g. "84-24/85-24 -15"
-    const mB = line.match(/^(\S+)\/(\S+)\s+(-?\d+)$/)
-
-    if (mA) {
-      [, seriesPart, bidStr, askStr] = mA
-    } else if (mB) {
-      [, bidStr, askStr, seriesPart] = mB
-    } else {
-      continue
+    const tokens = line.match(/\S+/g) || []
+    const priceToks: string[] = []
+    const seriesNums: number[] = []
+    for (const tok of tokens) {
+      if (tok.includes('/')) {
+        priceToks.push(tok)
+      } else {
+        // Accept: -19, 19, t19, T19
+        const m = tok.match(/^-?(\d+)$/) || tok.match(/^[tT](\d+)$/)
+        if (m) {
+          const n = parseInt(m[1], 10)
+          if (n > 0) seriesNums.push(n)
+        }
+      }
     }
-
-    const seriesNum = Math.abs(parseInt(seriesPart, 10))
-    if (!seriesNum || isNaN(seriesNum)) continue
-    const mode = /^\d+-\d{1,2}$/.test(bidStr) ? 'ticks'
-               : bidStr.startsWith('$')        ? 'price'
-               :                                 'spread'
-    const parsePx = (s: string) =>
-      mode === 'ticks' ? parse32nds(s.replace('$', ''))
-                       : (parseFloat(s.replace('$', '')) || null)
-    const bid = parsePx(bidStr)
-    const ask = parsePx(askStr)
-    if (bid == null || ask == null) continue
-    results.push({ series: String(seriesNum), bid, ask, mode })
+    if (priceToks.length === 0 || seriesNums.length === 0) continue
+    const count = Math.min(priceToks.length, seriesNums.length)
+    for (let i = 0; i < count; i++) {
+      const px = _parsePriceTok(priceToks[i])
+      if (px) results.push({ series: String(seriesNums[i]), ...px })
+    }
   }
   return results
 }
@@ -729,19 +753,21 @@ export default function BackendPage() {
     const sz = bulkSize.trim() || String(DEFAULT_SIZE[bulkTranche] ?? 5)
     try {
       for (const r of parsedBulk) {
-        const { error: priceErr } = await supabase.from('prices').upsert({
-          series_number: r.series, tranche_name: bulkTranche,
-          bid: r.bid, ask: r.ask,
-          bid_dealer: dealer, ask_dealer: dealer,
-          bid_size: sz, ask_size: sz,
-          mode: r.mode,
-        }, { onConflict: 'series_number,tranche_name' })
+        // Only write the sides that are actually present (supports one-sided quotes)
+        const upsertRow: Record<string, unknown> = {
+          series_number: r.series, tranche_name: bulkTranche, mode: r.mode,
+        }
+        if (r.bid != null) { upsertRow.bid = r.bid; upsertRow.bid_dealer = dealer; upsertRow.bid_size = sz }
+        if (r.ask != null) { upsertRow.ask = r.ask; upsertRow.ask_dealer = dealer; upsertRow.ask_size = sz }
+        const { error: priceErr } = await supabase.from('prices').upsert(upsertRow, { onConflict: 'series_number,tranche_name' })
         if (priceErr) console.warn('[bulk upsert]', priceErr.message)
-        const { error: auditErr } = await supabase.from('price_changes').insert([
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
-        ])
-        if (auditErr) console.warn('[bulk price_changes]', auditErr.message)
+        const auditRows: object[] = []
+        if (r.bid != null) auditRows.push({ series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        if (r.ask != null) auditRows.push({ series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        if (auditRows.length > 0) {
+          const { error: auditErr } = await supabase.from('price_changes').insert(auditRows)
+          if (auditErr) console.warn('[bulk price_changes]', auditErr.message)
+        }
       }
       // MS bulk — snapshot CDX HY for every submitted row
       if (dealer === 'MS' && latestCdxRef.current.hy != null) {
