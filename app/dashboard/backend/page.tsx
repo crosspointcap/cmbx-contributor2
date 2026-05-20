@@ -706,7 +706,8 @@ export default function BackendPage() {
     }
 
     if (adjCount > 0) {
-      const dir   = Object.values(snaps)[0] ? (newCdxHy > Object.values(snaps)[0].cdxHyAtEntry ? '↑' : '↓') : ''
+      const firstSnap = Object.values(snaps)[0]
+      const dir = firstSnap ? (newCdxHy > firstSnap.cdxHyAtEntry ? '↑' : '↓') : ''
       setAutoAdjMsg(`[${fmtTime(new Date().toISOString())}] AUTO-ADJ ${adjCount} MS price${adjCount !== 1 ? 's' : ''} — CDX HY ${dir}${newCdxHy.toFixed(2)}`)
     }
   }
@@ -728,17 +729,19 @@ export default function BackendPage() {
     const sz = bulkSize.trim() || String(DEFAULT_SIZE[bulkTranche] ?? 5)
     try {
       for (const r of parsedBulk) {
-        await supabase.from('prices').upsert({
+        const { error: priceErr } = await supabase.from('prices').upsert({
           series_number: r.series, tranche_name: bulkTranche,
           bid: r.bid, ask: r.ask,
           bid_dealer: dealer, ask_dealer: dealer,
           bid_size: sz, ask_size: sz,
           mode: r.mode,
         }, { onConflict: 'series_number,tranche_name' })
-        supabase.from('price_changes').insert([
+        if (priceErr) console.warn('[bulk upsert]', priceErr.message)
+        const { error: auditErr } = await supabase.from('price_changes').insert([
           { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
           { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
-        ]).then(({ error }) => { if (error) console.warn('[bulk price_changes]', error.message) })
+        ])
+        if (auditErr) console.warn('[bulk price_changes]', auditErr.message)
       }
       // MS bulk — snapshot CDX HY for every submitted row
       if (dealer === 'MS' && latestCdxRef.current.hy != null) {

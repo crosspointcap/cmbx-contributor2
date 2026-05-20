@@ -227,26 +227,15 @@ export default function HistoryPage() {
 
   async function deletePriceChange(id: string) {
     const { error } = await supabase.from('price_changes').delete().eq('id', id)
-    if (!error) setPriceChanges(prev => prev.filter(pc => pc.id !== id))
+    if (error) console.warn('[history] delete price_change failed:', error.message)
+    else setPriceChanges(prev => prev.filter(pc => pc.id !== id))
   }
 
-  // ── Market context lookups by date ───────────────────────────────────────
+  // ── Market context lookups ───────────────────────────────────────────────
+  // SPX: daily close fallback when stamped value is missing
   const spxByDate = useMemo(() => {
     const map: Record<string, number | null> = {}
     for (const c of dailyCloses) map[c.date] = c.spx_close
-    return map
-  }, [dailyCloses])
-
-  // CDX HY: ticker CXPHY546 Corp — Bloomberg returns a PRICE (not spread), so display as $XX.XX
-  const cdxHyByDate = useMemo(() => {
-    const map: Record<string, number | null> = {}
-    for (const c of dailyCloses) map[c.date] = c.cdx_hy_spread
-    return map
-  }, [dailyCloses])
-
-  const cdxIgByDate = useMemo(() => {
-    const map: Record<string, number | null> = {}
-    for (const c of dailyCloses) map[c.date] = c.cdx_ig_spread
     return map
   }, [dailyCloses])
 
@@ -255,14 +244,15 @@ export default function HistoryPage() {
     return spxByDate[ts.split('T')[0]] ?? null
   }
 
-  function cdxHyFor(ts: string, cdx_hy_at_time?: number | null): number | null {
-    if (cdx_hy_at_time != null) return cdx_hy_at_time
-    return cdxHyByDate[ts.split('T')[0]] ?? null
+  // CDX HY/IG: stamped value only — no daily close fallback.
+  // Values are stamped at submission time from cdx_intraday (15-sec feed)
+  // and corrected every 5 min by the backfill_cdx_prices() RPC.
+  function cdxHyFor(_ts: string, cdx_hy_at_time?: number | null): number | null {
+    return cdx_hy_at_time ?? null
   }
 
-  function cdxIgFor(ts: string, cdx_ig_at_time?: number | null): number | null {
-    if (cdx_ig_at_time != null) return cdx_ig_at_time
-    return cdxIgByDate[ts.split('T')[0]] ?? null
+  function cdxIgFor(_ts: string, cdx_ig_at_time?: number | null): number | null {
+    return cdx_ig_at_time ?? null
   }
 
   // ── Client-side search filter ─────────────────────────────────────────────
