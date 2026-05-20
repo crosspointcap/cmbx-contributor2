@@ -212,7 +212,7 @@ export default function MarketPage() {
   }
 
   return (
-    <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '14px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '17px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
       {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
@@ -283,7 +283,7 @@ export default function MarketPage() {
             const oddRowBg   = light ? '#f0f2f5' : '#0d0d0d'
 
             return (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '16px' }}>
             <thead>
               <tr style={{ position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
                 <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: `1px solid ${borderClr}`, width: '88px', fontWeight: 600, color: theme.fg }}>TRANCHE</th>
@@ -312,7 +312,7 @@ export default function MarketPage() {
                           padding: '4px 10px 3px 10px',
                           color: theme.accent,
                           background: headerBg,
-                          fontSize: '11px',
+                          fontSize: '13px',
                           fontWeight: 700,
                           letterSpacing: '2px',
                           borderBottom: `1px solid ${headerBdr}`,
@@ -340,7 +340,7 @@ export default function MarketPage() {
                           key={rowKey}
                           style={{ background: rowBg, borderBottom: `1px solid ${borderClr}` }}
                         >
-                          <td style={{ padding: '5px 6px 5px 10px', color: theme.fg, whiteSpace: 'nowrap', width: '88px', fontSize: '12px', fontWeight: 700 }}>
+                          <td style={{ padding: '5px 6px 5px 10px', color: theme.fg, whiteSpace: 'nowrap', width: '100px', fontSize: '14px', fontWeight: 700 }}>
                             {t.tranche_name}.{s.series_number}
                           </td>
                           {!hiddenCols.has('bid') && (
@@ -354,12 +354,12 @@ export default function MarketPage() {
                             </td>
                           )}
                           {!hiddenCols.has('bsz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? sizeClr : emptyClr, fontSize: '12px' }}>
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? sizeClr : emptyClr, fontSize: '12px', opacity: 0.55 }}>
                               {price?.bid_size != null ? String(price.bid_size) : '—'}
                             </td>
                           )}
                           {!hiddenCols.has('asz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? sizeClr : emptyClr, fontSize: '12px' }}>
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? sizeClr : emptyClr, fontSize: '12px', opacity: 0.55 }}>
                               {price?.ask_size != null ? String(price.ask_size) : '—'}
                             </td>
                           )}
