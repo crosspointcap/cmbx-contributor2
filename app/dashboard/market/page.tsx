@@ -54,13 +54,18 @@ const MY_COLOR: Record<string, string> = {
 // MS sees ALL other dealers' prices in red; everyone else sees them in white
 const MS_OTHERS_COLOR = '#ff5555'
 
-function priceColor(priceDealer: string | null, myDealer: string | null, hasPrice: boolean): string {
-  if (!hasPrice) return '#2a2a2a'
-  if (!priceDealer) return '#ffffff'                          // unattributed → white
+function priceColor(priceDealer: string | null, myDealer: string | null, hasPrice: boolean, fg: string): string {
+  if (!hasPrice) return 'transparent'
+  if (!priceDealer) return fg                                 // unattributed → theme text colour
   if (priceDealer === myDealer) return MY_COLOR[myDealer ?? ''] ?? '#f0c040'  // YOUR price
   if (myDealer === 'MS') return MS_OTHERS_COLOR               // MS sees others red
-  if (!myDealer) return '#ffffff'                             // not logged in → white
-  return '#ffffff'                                            // all others see white
+  if (!myDealer) return fg                                    // not logged in → theme text colour
+  return fg                                                   // all others → theme text colour
+}
+
+/** True when the theme background is a light colour (> 50% brightness on R channel) */
+function isLight(hex: string): boolean {
+  return parseInt(hex.replace('#', '').slice(0, 2), 16) > 127
 }
 
 type ColKey = 'bid' | 'ask' | 'bsz' | 'asz' | 'lastpx' | 'time'
@@ -237,8 +242,8 @@ export default function MarketPage() {
       <NavTabs active="market" isTrader={false} accent={theme.accent} onSettings={() => setShowSettings(true)} />
 
       {/* Column visibility toggles */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderBottom: '1px solid #161616', flexShrink: 0, background: '#060606' }}>
-        <span style={{ color: '#282828', fontSize: '10px', marginRight: '2px', letterSpacing: '1px' }}>COLS</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderBottom: `1px solid ${theme.fg}18`, flexShrink: 0, background: theme.bg }}>
+        <span style={{ color: theme.fg, fontSize: '10px', marginRight: '2px', letterSpacing: '1px', opacity: 0.3 }}>COLS</span>
         {ALL_COLS.map(col => {
           const hidden = hiddenCols.has(col.key)
           return (
@@ -247,8 +252,8 @@ export default function MarketPage() {
               onClick={() => toggleCol(col.key)}
               style={{
                 background: 'transparent',
-                color: hidden ? '#1e1e1e' : '#383838',
-                border: `1px solid ${hidden ? '#181818' : '#2a2a2a'}`,
+                color: hidden ? theme.fg + '22' : theme.fg + '55',
+                border: `1px solid ${hidden ? theme.fg + '18' : theme.fg + '33'}`,
                 padding: '1px 6px',
                 fontSize: '10px',
                 fontFamily: 'Courier New, monospace',
@@ -266,16 +271,28 @@ export default function MarketPage() {
       {/* Price grid */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <div style={{ flex: 1, overflow: 'auto' }}>
+          {/* ── Derive contrast-safe colours from the current theme ── */}
+          {(() => {
+            const light      = isLight(theme.bg)
+            const borderClr  = light ? '#cccccc' : '#1e1e1e'
+            const headerBg   = light ? '#e0e4ea' : '#0b0b0b'
+            const headerBdr  = light ? theme.accent + 'aa' : theme.accent + '55'
+            const dimClr     = light ? '#666666' : '#555555'
+            const emptyClr   = light ? '#aaaaaa' : '#2a2a2a'
+            const sizeClr    = light ? '#336688' : '#4a6a8a'
+            const oddRowBg   = light ? '#f0f2f5' : '#0d0d0d'
+
+            return (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
-              <tr style={{ color: '#444', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
-                <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1a1a1a', width: '88px', fontWeight: 400, color: '#333' }}>TRANCHE</th>
-                {!hiddenCols.has('bid')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>BID</th>}
-                {!hiddenCols.has('ask')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>ASK</th>}
-                {!hiddenCols.has('bsz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1a1a1a', minWidth: '50px', fontWeight: 400, color: '#333' }}>B.SZ</th>}
-                {!hiddenCols.has('asz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: '1px solid #1a1a1a', minWidth: '50px', fontWeight: 400, color: '#333' }}>A.SZ</th>}
-                {!hiddenCols.has('lastpx') && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>LAST PX</th>}
-                {!hiddenCols.has('time')   && <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>TIME</th>}
+              <tr style={{ position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
+                <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: `1px solid ${borderClr}`, width: '88px', fontWeight: 600, color: theme.fg }}>TRANCHE</th>
+                {!hiddenCols.has('bid')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: `2px solid ${theme.bid}`, minWidth: '70px', fontWeight: 600, color: theme.fg }}>BID</th>}
+                {!hiddenCols.has('ask')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: `2px solid ${theme.ask}`, minWidth: '70px', fontWeight: 600, color: theme.fg }}>ASK</th>}
+                {!hiddenCols.has('bsz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: `1px solid ${borderClr}`, minWidth: '50px', fontWeight: 400, color: dimClr }}>B.SZ</th>}
+                {!hiddenCols.has('asz')    && <th style={{ textAlign: 'right', padding: '5px 8px',  borderBottom: `1px solid ${borderClr}`, minWidth: '50px', fontWeight: 400, color: dimClr }}>A.SZ</th>}
+                {!hiddenCols.has('lastpx') && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: `1px solid ${borderClr}`, minWidth: '70px', fontWeight: 400, color: dimClr }}>LAST PX</th>}
+                {!hiddenCols.has('time')   && <th style={{ textAlign: 'right', padding: '5px 12px 5px 8px', borderBottom: `1px solid ${borderClr}`, minWidth: '70px', fontWeight: 400, color: dimClr }}>TIME</th>}
               </tr>
             </thead>
             <tbody>
@@ -292,68 +309,68 @@ export default function MarketPage() {
                       <td
                         colSpan={visibleColCount}
                         style={{
-                          padding: '4px 10px 3px 8px',
+                          padding: '4px 10px 3px 10px',
                           color: theme.accent,
-                          background: '#0b0b0b',
+                          background: headerBg,
                           fontSize: '11px',
-                          fontWeight: 600,
+                          fontWeight: 700,
                           letterSpacing: '2px',
-                          borderBottom: '1px solid #161616',
-                          borderTop: '2px solid #1c1500',
-                          borderLeft: '2px solid #3a2a00',
+                          borderBottom: `1px solid ${headerBdr}`,
+                          borderTop: `2px solid ${headerBdr}`,
+                          borderLeft: `3px solid ${theme.accent}`,
                         }}
                       >
                         CMBX.{s.series_number}
                       </td>
                     </tr>
-                    {visibleTranches.map(t => {
+                    {visibleTranches.map((t, tIdx) => {
                       const rowKey = `${s.series_number}:${t.tranche_name}`
                       const price = prices[rowKey]
                       const flash = flashRows[rowKey]
 
-                      let rowBg = 'transparent'
-                      if (flash === 'red') rowBg = '#3a0000'
+                      let rowBg = tIdx % 2 === 1 ? oddRowBg : 'transparent'
+                      if (flash === 'red')   rowBg = '#3a0000'
                       if (flash === 'green') rowBg = '#003a00'
 
-                      const bidColor = priceColor(price?.bid_dealer ?? null, myDealerCode, price?.bid != null)
-                      const askColor = priceColor(price?.ask_dealer ?? null, myDealerCode, price?.ask != null)
+                      const bidColor = priceColor(price?.bid_dealer ?? null, myDealerCode, price?.bid != null, theme.fg)
+                      const askColor = priceColor(price?.ask_dealer ?? null, myDealerCode, price?.ask != null, theme.fg)
 
                       return (
                         <tr
                           key={rowKey}
-                          style={{ background: rowBg, borderBottom: '1px solid #1e1e1e' }}
+                          style={{ background: rowBg, borderBottom: `1px solid ${borderClr}` }}
                         >
-                          <td style={{ padding: '5px 6px 5px 10px', color: '#ffffff', whiteSpace: 'nowrap', width: '88px', fontSize: '12px', fontWeight: 700 }}>
+                          <td style={{ padding: '5px 6px 5px 10px', color: theme.fg, whiteSpace: 'nowrap', width: '88px', fontSize: '12px', fontWeight: 700 }}>
                             {t.tranche_name}.{s.series_number}
                           </td>
                           {!hiddenCols.has('bid') && (
-                            <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor }}>
-                              {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                            <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor, fontWeight: 700 }}>
+                              {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: emptyClr }}>—</span>}
                             </td>
                           )}
                           {!hiddenCols.has('ask') && (
-                            <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor }}>
-                              {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                            <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor, fontWeight: 700 }}>
+                              {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: emptyClr }}>—</span>}
                             </td>
                           )}
                           {!hiddenCols.has('bsz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? '#4a6a8a' : '#1e1e1e', fontSize: '12px' }}>
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? sizeClr : emptyClr, fontSize: '12px' }}>
                               {price?.bid_size != null ? String(price.bid_size) : '—'}
                             </td>
                           )}
                           {!hiddenCols.has('asz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? '#4a6a8a' : '#1e1e1e', fontSize: '12px' }}>
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? sizeClr : emptyClr, fontSize: '12px' }}>
                               {price?.ask_size != null ? String(price.ask_size) : '—'}
                             </td>
                           )}
                           {!hiddenCols.has('lastpx') && (
-                            <td style={{ textAlign: 'right', padding: '5px 10px', color: price?.last_trade_px != null ? '#888' : '#2a2a2a' }}>
+                            <td style={{ textAlign: 'right', padding: '5px 10px', color: price?.last_trade_px != null ? dimClr : emptyClr }}>
                               {price?.last_trade_px != null ? formatPx(price.last_trade_px, price.mode) : '—'}
                             </td>
                           )}
                           {!hiddenCols.has('time') && (
-                            <td style={{ textAlign: 'right', padding: '5px 12px 5px 8px', color: '#444' }}>
-                              {price?.last_trade_time ? fmtTime(price.last_trade_time) : <span style={{ color: '#2a2a2a' }}>—</span>}
+                            <td style={{ textAlign: 'right', padding: '5px 12px 5px 8px', color: dimClr }}>
+                              {price?.last_trade_time ? fmtTime(price.last_trade_time) : <span style={{ color: emptyClr }}>—</span>}
                             </td>
                           )}
                         </tr>
@@ -364,15 +381,17 @@ export default function MarketPage() {
               })}
             </tbody>
           </table>
+            )
+          })()}
         </div>
 
       </div>
 
       {/* Legend */}
-      <div style={{ borderTop: '1px solid #1e1e1e', padding: '5px 12px', flexShrink: 0, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '16px', background: '#080808' }}>
-        <span style={{ color: '#333' }}><span style={{ color: '#ffffff' }}>■</span> MARKET</span>
-        {myDealerCode === 'MS' && <span style={{ color: '#333' }}><span style={{ color: MS_OTHERS_COLOR }}>■</span> OTHER</span>}
-        {myDealerCode && <span style={{ color: '#555' }}><span style={{ color: MY_COLOR[myDealerCode] ?? '#f0c040' }}>■</span> YOUR PRICE</span>}
+      <div style={{ borderTop: `1px solid ${theme.fg}22`, padding: '5px 12px', flexShrink: 0, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '16px', background: theme.bg }}>
+        <span style={{ color: theme.fg, opacity: 0.4 }}><span style={{ color: theme.fg, opacity: 1 }}>■</span> MARKET</span>
+        {myDealerCode === 'MS' && <span style={{ color: theme.fg, opacity: 0.4 }}><span style={{ color: MS_OTHERS_COLOR }}>■</span> OTHER</span>}
+        {myDealerCode && <span style={{ color: theme.fg, opacity: 0.5 }}><span style={{ color: MY_COLOR[myDealerCode] ?? theme.accent }}>■</span> YOUR PRICE</span>}
       </div>
     </div>
   )
