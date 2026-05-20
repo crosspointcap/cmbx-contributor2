@@ -4,6 +4,8 @@ import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime } from '../../../lib/utils' // fmtTime used for last_trade_time column
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
+import { ThemePanel } from '../ThemePanel'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,6 +81,8 @@ export default function MarketPage() {
   const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [hiddenCols, setHiddenCols] = useState<Set<ColKey>>(new Set())
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
+  const [showSettings, setShowSettings] = useState(false)
 
   // ── Hard auth — redirect to /login if no session; traders go to /backend ────
   useEffect(() => {
@@ -90,6 +94,7 @@ export default function MarketPage() {
       // Traders belong on the backend page — send them there
       if (prof?.role === 'trader') { window.location.href = '/dashboard/backend'; return }
       if (prof?.dealer_code) setMyDealerCode(prof.dealer_code)
+      const t = await loadTheme(); setTheme(t)
       setAuthReady(true)
     }
     checkAuth()
@@ -189,12 +194,20 @@ export default function MarketPage() {
 
   if (!authReady) return null
 
+  async function handleSaveTheme(t: Theme) {
+    setTheme(t)
+    setShowSettings(false)
+    await saveTheme(t)
+  }
+
   return (
-    <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '14px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '14px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
-        <span style={{ color: '#f0c040', fontSize: '14px', letterSpacing: '2px', fontWeight: 700 }}>
+        <span style={{ color: theme.accent, fontSize: '14px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX MARKET — CROSSPOINT CAPITAL
         </span>
         <button
@@ -215,7 +228,7 @@ export default function MarketPage() {
       </div>
 
       {/* Nav tabs — dealers see MARKET + HISTORY only, no ADMIN */}
-      <NavTabs active="market" isTrader={false} />
+      <NavTabs active="market" isTrader={false} accent={theme.accent} onSettings={() => setShowSettings(true)} />
 
       {/* Column visibility toggles */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderBottom: '1px solid #161616', flexShrink: 0, background: '#060606' }}>
@@ -249,7 +262,7 @@ export default function MarketPage() {
         <div style={{ flex: 1, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
-              <tr style={{ color: '#444', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+              <tr style={{ color: '#444', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
                 <th style={{ textAlign: 'left', padding: '5px 6px 5px 10px', borderBottom: '1px solid #1a1a1a', width: '88px', fontWeight: 400, color: '#333' }}>TRANCHE</th>
                 {!hiddenCols.has('bid')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>BID</th>}
                 {!hiddenCols.has('ask')    && <th style={{ textAlign: 'right', padding: '5px 10px', borderBottom: '1px solid #1a1a1a', minWidth: '70px', fontWeight: 400, color: '#333' }}>ASK</th>}
@@ -274,7 +287,7 @@ export default function MarketPage() {
                         colSpan={visibleColCount}
                         style={{
                           padding: '4px 10px 3px 8px',
-                          color: '#f0c040',
+                          color: theme.accent,
                           background: '#0b0b0b',
                           fontSize: '11px',
                           fontWeight: 600,

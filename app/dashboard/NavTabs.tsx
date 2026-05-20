@@ -1,13 +1,15 @@
 import React from 'react'
 
 interface NavTabsProps {
-  active: 'market' | 'history' | 'admin'
-  isTrader: boolean
+  active:       'market' | 'history' | 'admin'
+  isTrader:     boolean
+  accent?:      string
+  onSettings?:  () => void
 }
 
-export function NavTabs({ active, isTrader }: NavTabsProps) {
+export function NavTabs({ active, isTrader, accent = '#f0c040', onSettings }: NavTabsProps) {
   const tabs: { id: string; label: string; href: string }[] = [
-    { id: 'market',  label: 'MARKET',  href: '/dashboard/market' },
+    { id: 'market',  label: 'MARKET',  href: '/dashboard/market'  },
     { id: 'history', label: 'HISTORY', href: '/dashboard/history' },
     ...(isTrader ? [{ id: 'admin', label: 'ADMIN', href: '/dashboard/backend' }] : []),
   ]
@@ -15,6 +17,7 @@ export function NavTabs({ active, isTrader }: NavTabsProps) {
   return (
     <div style={{
       display: 'flex',
+      alignItems: 'center',
       padding: '0 12px',
       background: '#060606',
       borderBottom: '1px solid #1e1e1e',
@@ -33,9 +36,9 @@ export function NavTabs({ active, isTrader }: NavTabsProps) {
               letterSpacing: '2px',
               fontFamily: 'Courier New, monospace',
               fontWeight: isActive ? 700 : 400,
-              color: isActive ? '#f0c040' : '#3a3a3a',
+              color: isActive ? accent : '#3a3a3a',
               textDecoration: 'none',
-              borderBottom: isActive ? '2px solid #f0c040' : '2px solid transparent',
+              borderBottom: isActive ? `2px solid ${accent}` : '2px solid transparent',
               marginBottom: '-1px',
               transition: 'color 0.1s',
             }}
@@ -44,6 +47,27 @@ export function NavTabs({ active, isTrader }: NavTabsProps) {
           </a>
         )
       })}
+
+      {/* Settings gear — right-aligned */}
+      {onSettings && (
+        <button
+          onClick={onSettings}
+          title="Display settings"
+          style={{
+            marginLeft: 'auto',
+            background: 'transparent',
+            border: 'none',
+            color: '#3a3a3a',
+            fontSize: '15px',
+            cursor: 'pointer',
+            padding: '4px 8px',
+            fontFamily: 'Courier New, monospace',
+            lineHeight: 1,
+          }}
+        >
+          ⚙
+        </button>
+      )}
     </div>
   )
 }

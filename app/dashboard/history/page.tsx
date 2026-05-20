@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime, fmtShortDate } from '../../../lib/utils'
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
+import { ThemePanel } from '../ThemePanel'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -94,6 +96,8 @@ export default function HistoryPage() {
   const [loading,      setLoading]      = useState(false)
   const [isTrader,     setIsTrader]     = useState(false)
   const [myDealerCode, setMyDealerCode] = useState<string | null>(null)
+  const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
+  const [showSettings, setShowSettings] = useState(false)
 
   const usingCustomRange = !!(customFrom && customTo)
 
@@ -105,6 +109,7 @@ export default function HistoryPage() {
         .then(({ data }) => {
           if (data?.role === 'trader') setIsTrader(true)
           setMyDealerCode(data?.dealer_code ?? null)
+          loadTheme().then(setTheme)
         })
     })
   }, [])
@@ -292,12 +297,20 @@ export default function HistoryPage() {
     })
   }, [trades, q, isTrader, myDealerCode])
 
+  async function handleSaveTheme(t: Theme) {
+    setTheme(t)
+    setShowSettings(false)
+    await saveTheme(t)
+  }
+
   return (
-    <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '13px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
-        <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
+        <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX HISTORY — CROSSPOINT
         </span>
         <button
@@ -309,7 +322,7 @@ export default function HistoryPage() {
       </div>
 
       {/* Nav tabs */}
-      <NavTabs active="history" isTrader={isTrader} />
+      <NavTabs active="history" isTrader={isTrader} accent={theme.accent} onSettings={() => setShowSettings(true)} />
 
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, background: '#080808', flexWrap: 'wrap' }}>
@@ -318,9 +331,9 @@ export default function HistoryPage() {
         <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>RANGE</span>
         {QUICK_RANGES.map(r => (
           <button key={r} onClick={() => handleQuickRange(r)} style={{
-            background: !usingCustomRange && quickRange === r ? '#1a1500' : 'transparent',
-            color:      !usingCustomRange && quickRange === r ? '#f0c040' : '#3a3a3a',
-            border:    `1px solid ${!usingCustomRange && quickRange === r ? '#f0c040' : '#222'}`,
+            background: !usingCustomRange && quickRange === r ? theme.accent + '22' : 'transparent',
+            color:      !usingCustomRange && quickRange === r ? theme.accent : '#3a3a3a',
+            border:    `1px solid ${!usingCustomRange && quickRange === r ? theme.accent : '#222'}`,
             fontWeight: !usingCustomRange && quickRange === r ? 700 : 400,
             padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
             cursor: 'pointer', borderRadius: '2px',
@@ -333,19 +346,19 @@ export default function HistoryPage() {
         <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>FROM</span>
         <input
           type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? '#f0c040' : '#2a2a2a'}` }}
+          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? theme.accent : '#2a2a2a'}` }}
         />
         <span style={{ color: '#3a3a3a', fontSize: '11px', letterSpacing: '1px' }}>TO</span>
         <input
           type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? '#f0c040' : '#2a2a2a'}` }}
+          style={{ ...DATE_INPUT_STYLE, border: `1px solid ${usingCustomRange ? theme.accent : '#2a2a2a'}` }}
         />
         <button
           onClick={handleCustomGo} disabled={!customFrom || !customTo}
           style={{
-            background: customFrom && customTo ? '#1a1500' : 'transparent',
-            color:      customFrom && customTo ? '#f0c040' : '#333',
-            border:    `1px solid ${customFrom && customTo ? '#f0c040' : '#222'}`,
+            background: customFrom && customTo ? theme.accent + '22' : 'transparent',
+            color:      customFrom && customTo ? theme.accent : '#333',
+            border:    `1px solid ${customFrom && customTo ? theme.accent : '#222'}`,
             padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace',
             cursor: customFrom && customTo ? 'pointer' : 'default', borderRadius: '2px',
           }}

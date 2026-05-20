@@ -5,6 +5,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import * as XLSX from 'xlsx'
 import { fmt32nds, formatPx, fmtTime, parse32nds, buildGhostMap, mergeGhost, GhostMap } from '../../../lib/utils'
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
+import { ThemePanel } from '../ThemePanel'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -313,6 +315,8 @@ export default function BackendPage() {
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
+  const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
+  const [showSettings, setShowSettings] = useState(false)
   const [cdxLiveHy,    setCdxLiveHy]    = useState<number | null>(null)
   const [autoAdjMsg,   setAutoAdjMsg]   = useState<string>('')
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
@@ -358,6 +362,7 @@ export default function BackendPage() {
         window.location.href = '/dashboard/market'
         return
       }
+      const t = await loadTheme(); setTheme(t)
       setAuthChecked(true)
     }
     checkAuth()
@@ -917,8 +922,16 @@ export default function BackendPage() {
     )
   }
 
+  async function handleSaveTheme(t: Theme) {
+    setTheme(t)
+    setShowSettings(false)
+    await saveTheme(t)
+  }
+
   return (
-    <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
       <style>{`
         @keyframes shake {
           0%,100%{transform:translateX(0)}
@@ -935,7 +948,7 @@ export default function BackendPage() {
 
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
-        <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
+        <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX — CROSSPOINT CAPITAL
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -999,7 +1012,7 @@ export default function BackendPage() {
       </div>
 
       {/* Nav tabs */}
-      <NavTabs active="admin" isTrader={true} />
+      <NavTabs active="admin" isTrader={true} accent={theme.accent} onSettings={() => setShowSettings(true)} />
 
       {/* Dealer + action — single combined row */}
       <div style={{ display: 'flex', alignItems: 'flex-end', padding: '3px 10px', gap: '3px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
@@ -1040,11 +1053,11 @@ export default function BackendPage() {
 
         {/* HIT / LIFT / BULK */}
         <button onClick={() => executeTrade('hit')}
-          style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: hitShake ? 'shake 0.5s ease' : 'none' }}>
+          style={{ background: theme.ask + '22', color: theme.ask, border: `1px solid ${theme.ask}88`, padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: hitShake ? 'shake 0.5s ease' : 'none' }}>
           HIT
         </button>
         <button onClick={() => executeTrade('lift')}
-          style={{ background: '#003a00', color: '#66ff88', border: '1px solid #338833', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: liftShake ? 'shake 0.5s ease' : 'none' }}>
+          style={{ background: theme.bid + '22', color: theme.bid, border: `1px solid ${theme.bid}88`, padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: liftShake ? 'shake 0.5s ease' : 'none' }}>
           LIFT
         </button>
         <button onClick={() => setShowBulkInput(true)}
@@ -1077,11 +1090,11 @@ export default function BackendPage() {
       <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
           <thead>
-            <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+            <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
               <th style={{ textAlign: 'left',   padding: '3px 8px 3px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
               <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
-              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
-              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
+              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: `2px solid ${theme.bid}`, minWidth: '100px', fontWeight: 700 }}>BID</th>
+              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: `2px solid ${theme.ask}`, minWidth: '100px', fontWeight: 700 }}>OFFER</th>
               <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
               <th style={{ textAlign: 'right',  padding: '3px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
               <th style={{ textAlign: 'right',  padding: '3px 12px 3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
@@ -1101,7 +1114,7 @@ export default function BackendPage() {
                     colSpan={7}
                     style={{
                       padding: '8px 12px 5px 10px',
-                      color: '#f0c040',
+                      color: theme.accent,
                       background: '#0e0e0e',
                       fontSize: '15px',
                       fontWeight: 600,
@@ -1216,7 +1229,7 @@ export default function BackendPage() {
       {/* Blotter panel */}
       {showBlotter && (
         <div style={{ width: '300px', borderLeft: '1px solid #1e1e1e', background: '#080808', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#f0c040', fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: theme.accent, fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>TRADE BLOTTER</span>
             <span style={{ color: '#444', fontSize: '11px', fontWeight: 400 }}>{blotterTrades.length} trades</span>
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -1299,7 +1312,7 @@ export default function BackendPage() {
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>BULK PRICE INPUT</span>
+              <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>BULK PRICE INPUT</span>
               <button onClick={() => setShowBulkInput(false)} style={{ background: 'transparent', border: 'none', color: '#555', fontSize: '18px', cursor: 'pointer', fontFamily: 'Courier New', padding: '0 4px' }}>×</button>
             </div>
 
