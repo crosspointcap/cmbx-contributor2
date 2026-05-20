@@ -56,17 +56,18 @@ export function NavTabs({ active, isTrader, accent = '#f0c040', onSettings }: Na
           style={{
             marginLeft: 'auto',
             background: 'transparent',
-            border: '1px solid #2a2a2a',
-            color: '#666',
-            fontSize: '18px',
+            border: `1px solid ${accent}66`,
+            color: accent,
+            fontSize: '24px',
             cursor: 'pointer',
-            padding: '4px 10px',
+            padding: '2px 12px',
             fontFamily: 'Courier New, monospace',
             lineHeight: 1,
             borderRadius: '2px',
+            opacity: 0.75,
           }}
-          onMouseEnter={e => { e.currentTarget.style.color = accent; e.currentTarget.style.borderColor = accent }}
-          onMouseLeave={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.borderColor = '#2a2a2a' }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = accent }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '0.75'; e.currentTarget.style.borderColor = `${accent}66` }}
         >
           ⚙
         </button>
