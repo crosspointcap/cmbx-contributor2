@@ -10,66 +10,71 @@ interface Props {
 }
 
 // ── Preset themes ────────────────────────────────────────────────────────────
-const PRESETS: { label: string; theme: Theme }[] = [
+const PRESETS: { label: string; desc: string; theme: Theme }[] = [
   {
     label: 'DARK',
-    theme: {
-      bg: '#0a0a0a', fg: '#cccccc', accent: '#f0c040', bid: '#66ff88', ask: '#ff6666',
-    },
+    desc:  'Black · grey text · amber',
+    theme: { bg: '#0a0a0a', fg: '#ffffff', accent: '#f0c040', bid: '#00ee55', ask: '#ff3333' },
   },
   {
-    label: 'WARM',
-    theme: {
-      bg: '#1a1208', fg: '#e8d5aa', accent: '#f0a020', bid: '#88cc55', ask: '#ff7744',
-    },
+    label: 'BLUE',
+    desc:  'Royal blue · white · red/orange',
+    theme: { bg: '#1055a0', fg: '#ffffff', accent: '#ffdd00', bid: '#ff7722', ask: '#ff2222' },
   },
   {
     label: 'LIGHT',
-    theme: {
-      bg: '#f2f0eb', fg: '#1a1a1a', accent: '#1a55aa', bid: '#1a7a2a', ask: '#cc2222',
-    },
+    desc:  'White · black text · navy',
+    theme: { bg: '#f5f5f5', fg: '#111111', accent: '#1055a0', bid: '#007722', ask: '#cc1111' },
   },
 ]
 
-// ── Curated swatches — both dark and light options ───────────────────────────
+// ── Curated swatches — vivid, high-contrast, covers dark + light + blue ──────
 const SWATCHES: Record<keyof Theme, string[]> = {
   bg: [
     // dark
-    '#0a0a0a', '#060606', '#111111', '#1a1208', '#0a0a14', '#0a0f0a',
+    '#0a0a0a', '#111111', '#1a1a1a',
+    // blue (TP-style)
+    '#1055a0', '#1565c0', '#0d3b7a', '#0a2a5a',
     // light
-    '#f2f0eb', '#ffffff', '#e8e8e8', '#f0ede0', '#e8eef5', '#edf5ed',
+    '#f5f5f5', '#ffffff', '#eef2f8',
   ],
   fg: [
-    // light (for dark backgrounds)
-    '#cccccc', '#ffffff', '#aaaaaa', '#e8d5aa', '#ddddcc', '#bbbbbb',
-    // dark (for light backgrounds)
-    '#1a1a1a', '#111111', '#333333', '#222233', '#1a1208', '#2a2a1a',
+    // light text (for dark/blue backgrounds)
+    '#ffffff', '#eeeeee', '#cccccc', '#ddddaa',
+    // dark text (for light backgrounds)
+    '#111111', '#222222', '#333333', '#1a1a44',
   ],
   accent: [
-    '#f0c040', '#f0a020', '#1a55aa', '#4488ff',
-    '#44aa44', '#cc2222', '#cc88ff', '#44ddff',
+    '#f0c040', '#ffdd00', '#ff9900',  // golds / ambers
+    '#1055a0', '#4499ff',              // blues
+    '#00cc44', '#cc1111', '#cc44ff',   // green / red / purple
   ],
   bid: [
-    '#66ff88', '#44dd66', '#1a7a2a', '#2a8a3a',
-    '#4488ff', '#44ffff', '#aaffcc', '#88cc55',
+    '#00ee55', '#00cc44', '#44ff88',   // vivid greens
+    '#ff7722', '#ff9900',              // TP-style orange bids
+    '#ffffff', '#ffff00', '#44ddff',   // white / yellow / cyan
   ],
   ask: [
-    '#ff6666', '#ff4444', '#cc2222', '#aa1111',
-    '#ff8844', '#ff7744', '#ff44aa', '#dd4422',
+    '#ff3333', '#ff2222', '#ee0000',   // vivid reds
+    '#ff5500', '#ff7722',              // red-oranges
+    '#ffffff', '#ffaa00', '#ff44aa',   // white / amber / pink
   ],
 }
 
-const FIELDS: { key: keyof Theme; label: string; hint: string }[] = [
-  { key: 'bg',     label: 'BACKGROUND', hint: 'page background'           },
-  { key: 'fg',     label: 'TEXT',       hint: 'body text'                 },
-  { key: 'accent', label: 'ACCENT',     hint: 'headers & highlights'      },
-  { key: 'bid',    label: 'BID',        hint: 'bid prices & buy button'   },
-  { key: 'ask',    label: 'OFFER',      hint: 'ask prices & sell button'  },
+const FIELDS: { key: keyof Theme; label: string }[] = [
+  { key: 'bg',     label: 'BACKGROUND' },
+  { key: 'fg',     label: 'TEXT'       },
+  { key: 'accent', label: 'ACCENT'     },
+  { key: 'bid',    label: 'BID'        },
+  { key: 'ask',    label: 'OFFER'      },
 ]
 
 export function ThemePanel({ theme, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<Theme>(theme)
   const set = (key: keyof Theme, val: string) => setDraft(prev => ({ ...prev, [key]: val }))
+
+  // Detect if bg is "light" so we can pick a readable panel border/bg
+  const isLightBg = parseInt(draft.bg.slice(1, 3), 16) > 180
 
   return (
     <div
@@ -79,62 +84,80 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
     >
       <div style={{
         background: draft.bg,
-        border: `1px solid ${draft.accent}`,
-        padding: '22px 26px',
-        width: '360px',
+        border: `2px solid ${draft.accent}`,
+        padding: '24px 28px',
+        width: '380px',
         fontFamily: 'Courier New, monospace',
-        borderRadius: '3px',
+        borderRadius: '4px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
       }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-          <span style={{ color: draft.accent, fontSize: '13px', fontWeight: 700, letterSpacing: '2px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <span style={{ color: draft.accent, fontSize: '14px', fontWeight: 700, letterSpacing: '2px' }}>
             DISPLAY SETTINGS
           </span>
           <button onClick={onClose}
-            style={{ background: 'none', border: 'none', color: draft.fg, fontSize: '18px', cursor: 'pointer', opacity: 0.5, fontFamily: 'Courier New' }}>
+            style={{ background: 'none', border: 'none', color: draft.fg, fontSize: '20px', cursor: 'pointer', opacity: 0.5, fontFamily: 'Courier New', lineHeight: 1 }}>
             ×
           </button>
         </div>
 
-        {/* Preset themes */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
-          {PRESETS.map(({ label, theme: preset }) => {
-            const isActive = (Object.keys(preset) as (keyof Theme)[]).every(k => draft[k] === preset[k])
-            return (
-              <button
-                key={label}
-                onClick={() => setDraft(preset)}
-                style={{
-                  flex: 1,
-                  padding: '6px 4px',
-                  fontSize: '11px',
-                  fontFamily: 'Courier New, monospace',
-                  fontWeight: 700,
-                  letterSpacing: '1px',
-                  cursor: 'pointer',
-                  borderRadius: '2px',
-                  background: isActive ? preset.accent + '22' : preset.bg,
-                  color: isActive ? preset.accent : preset.fg,
-                  border: `1px solid ${isActive ? preset.accent : preset.accent + '55'}`,
-                }}
-              >
-                {label}
-              </button>
-            )
-          })}
+        {/* ── Preset theme buttons ── */}
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ color: draft.fg, fontSize: '10px', letterSpacing: '1px', opacity: 0.5, marginBottom: '8px' }}>
+            PRESETS
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {PRESETS.map(({ label, desc, theme: preset }) => {
+              const isActive = (Object.keys(preset) as (keyof Theme)[]).every(k => draft[k] === preset[k])
+              return (
+                <button
+                  key={label}
+                  onClick={() => setDraft(preset)}
+                  title={desc}
+                  style={{
+                    flex: 1,
+                    padding: '10px 4px 8px',
+                    fontSize: '11px',
+                    fontFamily: 'Courier New, monospace',
+                    fontWeight: 700,
+                    letterSpacing: '1px',
+                    cursor: 'pointer',
+                    borderRadius: '3px',
+                    background: preset.bg,
+                    color: preset.fg,
+                    border: isActive
+                      ? `2px solid ${preset.accent}`
+                      : `1px solid ${preset.accent}66`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  <span style={{ fontSize: '13px' }}>{label}</span>
+                  {/* Mini preview bar */}
+                  <span style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                    <span style={{ width: '14px', height: '6px', background: preset.bid, borderRadius: '1px', display: 'inline-block' }} />
+                    <span style={{ width: '14px', height: '6px', background: preset.ask, borderRadius: '1px', display: 'inline-block' }} />
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Swatch rows */}
-        {FIELDS.map(({ key, label, hint }) => (
-          <div key={key} style={{ marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '5px' }}>
-              <span style={{ color: draft.fg, fontSize: '10px', letterSpacing: '1px', opacity: 0.6, width: '90px' }}>
-                {label}
-              </span>
-              <span style={{ color: draft.fg, fontSize: '10px', opacity: 0.3 }}>{hint}</span>
-            </div>
-            <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Divider */}
+        <div style={{ borderTop: `1px solid ${draft.fg}22`, marginBottom: '16px' }} />
+
+        {/* ── Swatch rows ── */}
+        {FIELDS.map(({ key, label }) => (
+          <div key={key} style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: draft.fg, fontSize: '10px', letterSpacing: '1px', opacity: 0.55, width: '84px', flexShrink: 0 }}>
+              {label}
+            </span>
+            <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
               {SWATCHES[key].map(color => {
                 const isSelected = draft[key] === color
                 return (
@@ -143,60 +166,54 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
                     onClick={() => set(key, color)}
                     title={color}
                     style={{
-                      width: '26px', height: '26px',
+                      width: '28px', height: '28px',
                       background: color,
-                      border: isSelected ? `2px solid ${draft.accent}` : '2px solid transparent',
+                      border: isSelected
+                        ? `3px solid ${draft.accent}`
+                        : `1px solid ${isLightBg ? '#cccccc' : '#333333'}`,
                       borderRadius: '3px',
                       cursor: 'pointer',
                       flexShrink: 0,
-                      outline: isSelected ? `1px solid ${draft.bg}` : 'none',
-                      outlineOffset: '-3px',
                     }}
                   />
                 )
               })}
-              {/* Current value chip — shows selected hex, click to keep */}
-              <span style={{
-                color: draft[key],
-                fontSize: '10px',
-                fontFamily: 'Courier New, monospace',
-                opacity: 0.7,
-                marginLeft: '2px',
-                minWidth: '52px',
-              }}>
+              {/* Live hex readout */}
+              <span style={{ color: draft[key], fontSize: '10px', opacity: 0.6, marginLeft: 'auto', minWidth: '54px', textAlign: 'right' }}>
                 {draft[key]}
               </span>
             </div>
           </div>
         ))}
 
-        {/* Preview swatch */}
+        {/* ── Live preview row ── */}
         <div style={{
-          margin: '16px 0 12px',
-          padding: '8px 12px',
-          border: `1px solid ${draft.accent}44`,
-          borderRadius: '2px',
+          margin: '16px 0 14px',
+          padding: '10px 14px',
+          border: `1px solid ${draft.accent}66`,
+          borderRadius: '3px',
+          background: draft.bg,
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
-          background: draft.bg,
+          gap: '14px',
         }}>
-          <span style={{ color: draft.accent, fontSize: '12px', fontWeight: 700 }}>CMBX.15</span>
-          <span style={{ color: draft.bid,    fontSize: '12px', fontWeight: 700 }}>85-16</span>
-          <span style={{ color: draft.fg,     fontSize: '11px', opacity: 0.4 }}>/</span>
-          <span style={{ color: draft.ask,    fontSize: '12px', fontWeight: 700 }}>86-00</span>
-          <span style={{ color: draft.fg,     fontSize: '11px', opacity: 0.5, marginLeft: 'auto' }}>preview</span>
+          <span style={{ color: draft.accent, fontSize: '13px', fontWeight: 700 }}>CMBX.15</span>
+          <span style={{ color: draft.bid,    fontSize: '14px', fontWeight: 700 }}>85-16</span>
+          <span style={{ color: draft.fg,     fontSize: '12px', opacity: 0.35 }}>/</span>
+          <span style={{ color: draft.ask,    fontSize: '14px', fontWeight: 700 }}>86-00</span>
+          <span style={{ color: draft.fg,     fontSize: '10px', opacity: 0.4, marginLeft: 'auto' }}>preview</span>
         </div>
 
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+        {/* ── Action buttons ── */}
+        <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={() => onSave(draft)}
             style={{
-              flex: 1, background: draft.bid + '22', color: draft.bid,
-              border: `1px solid ${draft.bid}66`, padding: '6px',
+              flex: 1, padding: '8px',
+              background: draft.accent, color: draft.bg,
+              border: 'none',
               fontSize: '12px', fontFamily: 'Courier New', cursor: 'pointer',
-              borderRadius: '2px', fontWeight: 700, letterSpacing: '1px',
+              borderRadius: '3px', fontWeight: 700, letterSpacing: '1px',
             }}
           >
             SAVE
@@ -204,10 +221,11 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
           <button
             onClick={() => { setDraft(DEFAULT_THEME); onSave(DEFAULT_THEME) }}
             style={{
+              padding: '8px 14px',
               background: 'transparent', color: draft.fg,
-              border: `1px solid ${draft.fg}33`, padding: '6px 14px',
+              border: `1px solid ${draft.fg}44`,
               fontSize: '12px', fontFamily: 'Courier New', cursor: 'pointer',
-              borderRadius: '2px', opacity: 0.6,
+              borderRadius: '3px', opacity: 0.7,
             }}
           >
             RESET
@@ -215,10 +233,11 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
           <button
             onClick={onClose}
             style={{
+              padding: '8px 14px',
               background: 'transparent', color: draft.fg,
-              border: `1px solid ${draft.fg}33`, padding: '6px 14px',
+              border: `1px solid ${draft.fg}44`,
               fontSize: '12px', fontFamily: 'Courier New', cursor: 'pointer',
-              borderRadius: '2px', opacity: 0.6,
+              borderRadius: '3px', opacity: 0.7,
             }}
           >
             CANCEL
