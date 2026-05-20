@@ -9,32 +9,53 @@ interface Props {
   onClose: () => void
 }
 
-// Curated swatches per field — terminal-friendly palette
+// ── Preset themes ────────────────────────────────────────────────────────────
+const PRESETS: { label: string; theme: Theme }[] = [
+  {
+    label: 'DARK',
+    theme: {
+      bg: '#0a0a0a', fg: '#cccccc', accent: '#f0c040', bid: '#66ff88', ask: '#ff6666',
+    },
+  },
+  {
+    label: 'WARM',
+    theme: {
+      bg: '#1a1208', fg: '#e8d5aa', accent: '#f0a020', bid: '#88cc55', ask: '#ff7744',
+    },
+  },
+  {
+    label: 'LIGHT',
+    theme: {
+      bg: '#f2f0eb', fg: '#1a1a1a', accent: '#1a55aa', bid: '#1a7a2a', ask: '#cc2222',
+    },
+  },
+]
+
+// ── Curated swatches — both dark and light options ───────────────────────────
 const SWATCHES: Record<keyof Theme, string[]> = {
   bg: [
-    '#0a0a0a', '#060606', '#111111',
-    '#0a0f0a', '#0a0a14', '#14100a',
-    '#0f0a14', '#0a1414',
+    // dark
+    '#0a0a0a', '#060606', '#111111', '#1a1208', '#0a0a14', '#0a0f0a',
+    // light
+    '#f2f0eb', '#ffffff', '#e8e8e8', '#f0ede0', '#e8eef5', '#edf5ed',
   ],
   fg: [
-    '#cccccc', '#ffffff', '#aaaaaa',
-    '#e8e0cc', '#ccddcc', '#ddddcc',
-    '#bbbbbb', '#999999',
+    // light (for dark backgrounds)
+    '#cccccc', '#ffffff', '#aaaaaa', '#e8d5aa', '#ddddcc', '#bbbbbb',
+    // dark (for light backgrounds)
+    '#1a1a1a', '#111111', '#333333', '#222233', '#1a1208', '#2a2a1a',
   ],
   accent: [
-    '#f0c040', '#4488ff', '#66ff88',
-    '#ff6644', '#cc88ff', '#44ddff',
-    '#ff4488', '#ffdd44',
+    '#f0c040', '#f0a020', '#1a55aa', '#4488ff',
+    '#44aa44', '#cc2222', '#cc88ff', '#44ddff',
   ],
   bid: [
-    '#66ff88', '#44dd66', '#88ffaa',
-    '#44ffff', '#4488ff', '#aaffcc',
-    '#ffffff', '#ffff44',
+    '#66ff88', '#44dd66', '#1a7a2a', '#2a8a3a',
+    '#4488ff', '#44ffff', '#aaffcc', '#88cc55',
   ],
   ask: [
-    '#ff6666', '#ff4444', '#ff8844',
-    '#ff44aa', '#ff88cc', '#ffaa44',
-    '#ffffff', '#ff6699',
+    '#ff6666', '#ff4444', '#cc2222', '#aa1111',
+    '#ff8844', '#ff7744', '#ff44aa', '#dd4422',
   ],
 }
 
@@ -74,6 +95,34 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
             style={{ background: 'none', border: 'none', color: draft.fg, fontSize: '18px', cursor: 'pointer', opacity: 0.5, fontFamily: 'Courier New' }}>
             ×
           </button>
+        </div>
+
+        {/* Preset themes */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
+          {PRESETS.map(({ label, theme: preset }) => {
+            const isActive = (Object.keys(preset) as (keyof Theme)[]).every(k => draft[k] === preset[k])
+            return (
+              <button
+                key={label}
+                onClick={() => setDraft(preset)}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  fontSize: '11px',
+                  fontFamily: 'Courier New, monospace',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                  cursor: 'pointer',
+                  borderRadius: '2px',
+                  background: isActive ? preset.accent + '22' : preset.bg,
+                  color: isActive ? preset.accent : preset.fg,
+                  border: `1px solid ${isActive ? preset.accent : preset.accent + '55'}`,
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
 
         {/* Swatch rows */}
