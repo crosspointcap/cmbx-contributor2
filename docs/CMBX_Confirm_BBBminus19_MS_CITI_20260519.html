@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CMBX Confirm — CMBX.NA.BBB-.19 — MS / CITI — May 19, 2026</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 13px;
+  color: #222;
+  background: #fff;
+  padding: 40px 52px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+table { border-collapse: collapse; width: 100%; }
+@page { margin: 14mm 16mm; size: A4 portrait; }
+@media print { body { padding: 0; } }
+
+.header       { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.brand        { font-size: 22px; font-weight: 700; letter-spacing: -1px; color: #111; }
+.brand-x      { color: #e03020; }
+.brand-sub    { font-size: 11px; color: #888; letter-spacing: 2px; }
+
+.banner       { background: #f0f4fb; padding: 10px 16px; border-left: 4px solid #2255aa; margin-bottom: 22px; display: flex; align-items: center; gap: 20px; }
+.banner-idx   { font-weight: 700; font-size: 15px; color: #2255aa; }
+.banner-meta  { color: #555; font-size: 12px; }
+
+.section-lbl  { color: #2255aa; font-weight: 700; font-size: 11px; letter-spacing: 1.5px; margin-bottom: 8px; text-transform: uppercase; }
+
+.party-table  { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-size: 12.5px; border: 1px solid #e0e0e0; }
+.party-table td { padding: 12px 14px; vertical-align: top; }
+.party-table .lbl-col { width: 210px; border-right: 1px solid #e0e0e0; }
+.party-buyer  { background: #fff6f6; border-bottom: 1px solid #e0e0e0; }
+.party-seller { background: #f6fff6; }
+.role-buyer   { font-weight: 700; color: #881111; }
+.role-seller  { font-weight: 700; color: #1a6622; }
+.role-sub     { color: #666; font-size: 11px; margin-top: 2px; }
+.role-pay     { font-size: 11px; margin-top: 4px; }
+.legal-name   { font-weight: 700; }
+.legal-addr   { color: #555; font-size: 12px; line-height: 1.5; }
+
+.terms-table  { width: 100%; border-collapse: collapse; margin-bottom: 22px; border: 1px solid #e0e0e0; font-size: 12.5px; }
+.terms-table td { padding: 6px 14px; border-bottom: 1px solid #efefef; }
+.terms-table .lbl { color: #555; width: 210px; }
+.terms-table .val { font-weight: 500; }
+.shade { background: #f8f9fc; }
+
+.pv-box       { border: 1px solid #d0d8ee; background: #f4f7fb; padding: 14px 18px; margin-bottom: 22px; }
+.pv-amount    { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.pv-amt-lbl   { color: #444; font-size: 12.5px; }
+.pv-amt-val   { font-weight: 700; font-size: 18px; color: #111; }
+.pv-calc      { color: #888; font-size: 11px; font-family: "Courier New", monospace; margin-bottom: 10px; }
+.pv-grid      { display: grid; grid-template-columns: 120px 1fr; gap: 4px; font-size: 12.5px; }
+.pv-lbl       { color: #555; }
+.pv-payer     { font-weight: 600; color: #881111; }
+.pv-receiver  { font-weight: 600; color: #1a6622; }
+
+.footer-text  { font-size: 11.5px; color: #555; line-height: 1.7; border-top: 1px solid #e0e0e0; padding-top: 16px; margin-bottom: 32px; }
+.footer-text strong { color: #222; }
+
+.download-btn {
+  display: block; width: 180px; margin: 0 auto;
+  background: #2255aa; color: #fff; border: none;
+  padding: 10px 24px; font-size: 13px; cursor: pointer;
+  font-family: Georgia, serif; letter-spacing: 1px; border-radius: 2px;
+  text-align: center;
+}
+@media print { .download-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="header">
+  <div>
+    <div style="font-size:18px; font-weight:700; color:#111; margin-bottom:3px;">CMBX Trade Confirmation</div>
+    <div style="color:#666; font-size:13px;">Trade Date: May 19, 2026</div>
+  </div>
+  <div style="text-align:right">
+    <div class="brand">CROSS<span class="brand-x">✕</span>POINT</div>
+    <div class="brand-sub">C A P I T A L</div>
+  </div>
+</div>
+
+<!-- ── Reference banner ───────────────────────────────────────────────── -->
+<div class="banner">
+  <span class="banner-idx">CMBX.NA.BBB-.19</span>
+  <span class="banner-meta">Maturity: December 17, 2058</span>
+  <span class="banner-meta">Coupon: 300 bps/yr</span>
+</div>
+
+<!-- ── Parties ────────────────────────────────────────────────────────── -->
+<div class="section-lbl">Parties to the Transaction</div>
+<table class="party-table">
+  <tr class="party-buyer">
+    <td class="lbl-col">
+      <div class="role-buyer">Protection Buyer</div>
+      <div class="role-sub">Seller of Risk · Short Credit</div>
+      <div class="role-pay" style="color:#881111">Pays: 300 bps/yr running</div>
+      <div class="role-pay" style="color:#1a6622; font-weight:700">Receives: upfront PV</div>
+    </td>
+    <td>
+      <div class="legal-name">Morgan Stanley Co. International PLC</div>
+      <div class="legal-addr">
+        1300 Thames Street, Thames Street Wharf, 3rd Floor<br>
+        Baltimore, MD 21231
+      </div>
+      <div class="legal-addr">Email: spgagency@morganstanley.com; spgderivta@morganstanley.com</div>
+    </td>
+  </tr>
+  <tr class="party-seller">
+    <td class="lbl-col">
+      <div class="role-seller">Protection Seller</div>
+      <div class="role-sub">Buyer of Risk · Long Credit</div>
+      <div class="role-pay" style="color:#1a6622; font-weight:700">Receives: 300 bps/yr running</div>
+      <div class="role-pay" style="color:#881111">Pays: upfront PV</div>
+    </td>
+    <td>
+      <div class="legal-name">Citigroup Global Markets Inc.</div>
+      <div class="legal-addr">
+        390 Greenwich St., 4th Floor<br>
+        New York, NY 10013
+      </div>
+      <div class="legal-addr">Tel: (212) 723-6156</div>
+      <div class="legal-addr">Email: fi.us.cmbs.trading@citi.com</div>
+    </td>
+  </tr>
+</table>
+
+<!-- ── Trade Terms ────────────────────────────────────────────────────── -->
+<div class="section-lbl">Trade Terms</div>
+<table class="terms-table">
+  <tr>         <td class="lbl">Index</td>             <td class="val">CMBX.NA.BBB-.19</td></tr>
+  <tr class="shade"><td class="lbl">Trade Type</td>   <td class="val">Credit Default Swap (CDS) — ISDA Standard Terms</td></tr>
+  <tr>         <td class="lbl">Notional Amount</td>   <td class="val">$5,000,000</td></tr>
+  <tr class="shade"><td class="lbl">Trade Price</td>  <td class="val">92.25</td></tr>
+  <tr>         <td class="lbl">Coupon (Running)</td>  <td class="val">300 bps per annum (3.00% / year)</td></tr>
+  <tr class="shade"><td class="lbl">Maturity Date</td><td class="val">December 17, 2058</td></tr>
+  <tr>         <td class="lbl">Effective Date</td>    <td class="val">May 19, 2026&nbsp;&nbsp;(T+0)</td></tr>
+  <tr class="shade"><td class="lbl">Settlement Date</td><td class="val">May 22, 2026&nbsp;&nbsp;(T+3 business days)</td></tr>
+</table>
+
+<!-- ── Upfront Payment ────────────────────────────────────────────────── -->
+<div class="section-lbl">Upfront Payment (Present Value)</div>
+<div class="pv-box">
+  <div class="pv-amount">
+    <span class="pv-amt-lbl">PV Amount:</span>
+    <span class="pv-amt-val">$387,500</span>
+  </div>
+  <div class="pv-calc">(100.00 − 92.25) / 100 × $5,000,000</div>
+  <div class="pv-grid">
+    <span class="pv-lbl">Payable by:</span>
+    <span class="pv-payer">Citigroup Global Markets Inc. (Protection Seller)</span>
+    <span class="pv-lbl">Payable to:</span>
+    <span class="pv-receiver">Morgan Stanley Co. International PLC (Protection Buyer)</span>
+  </div>
+</div>
+
+<!-- ── Facilitation Fee ───────────────────────────────────────────────── -->
+<div class="section-lbl">Facilitation Fee</div>
+<table class="terms-table" style="margin-bottom:22px">
+  <tr>             <td class="lbl">Charged by</td><td class="val">Crosspoint Capital</td></tr>
+  <tr class="shade"><td class="lbl">Amount</td>   <td class="val">$625</td></tr>
+</table>
+
+<!-- ── Footer ────────────────────────────────────────────────────────── -->
+<div class="footer-text">
+  This document confirms the terms agreed between
+  <strong>Morgan Stanley Co. International PLC</strong> (Protection Buyer) and
+  <strong>Citigroup Global Markets Inc.</strong> (Protection Seller)
+  for the CMBX.NA.BBB-.19 trade executed on <strong>May 19, 2026</strong>.
+  Effective date is T+0. Settlement date is T+3 business days
+  (<strong>May 22, 2026</strong>). All terms are subject to the ISDA Master Agreement
+  and related Schedule executed between the parties.
+</div>
+
+<!-- ── Download button (screen only) ─────────────────────────────────── -->
+<button class="download-btn" onclick="window.print()">↓ SAVE AS PDF</button>
+
+</body>
+</html>

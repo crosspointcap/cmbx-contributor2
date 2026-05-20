@@ -307,7 +307,8 @@ export default function BackendPage() {
   const errorTimer       = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
-  const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
+  const [confirmTrade,  setConfirmTrade]  = useState<BlotterTrade | null>(null)
+  const [confirmSpread, setConfirmSpread] = useState('')
   const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
   const [showBulkInput, setShowBulkInput] = useState(false)
   const [bulkText,      setBulkText]      = useState('')
@@ -1252,7 +1253,7 @@ export default function BackendPage() {
                   </div>
                   <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
                     <button
-                      onClick={() => { setConfirmTrade(t) }}
+                      onClick={() => { setConfirmTrade(t); setConfirmSpread('') }}
                       style={{ flex: 1, background: '#0f0f00', color: '#f0c040', border: '1px solid #333300', padding: '2px 0', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', letterSpacing: '1px', borderRadius: '2px' }}
                     >
                       VIEW CONFIRM
@@ -1417,12 +1418,12 @@ export default function BackendPage() {
         const priceDecimal = t.price != null ? t.price.toFixed(2) : '—'
 
         // ── Protection Buyer = Seller of Risk (SHORT) ─────────────────────────
-        // HIT:  active dealer hits bid   → active = Protection Buyer (Seller of Risk)
-        //                                  passive = Protection Seller (Buyer of Risk)
-        // LIFT: active dealer lifts ask  → active = Protection Seller (Buyer of Risk)
-        //                                  passive = Protection Buyer (Seller of Risk)
-        const protBuyerCode  = t.action === 'HIT'  ? t.dealer              : (t.passive_dealer ?? '—')
-        const protSellerCode = t.action === 'HIT'  ? (t.passive_dealer ?? '—') : t.dealer
+        // LIFT: active dealer lifts ask → active = Protection Buyer (Seller of Risk)
+        //                                 passive = Protection Seller (Buyer of Risk)
+        // HIT:  active dealer hits bid  → active = Protection Seller (Buyer of Risk)
+        //                                 passive = Protection Buyer (Seller of Risk)
+        const protBuyerCode  = t.action === 'LIFT' ? t.dealer              : (t.passive_dealer ?? '—')
+        const protSellerCode = t.action === 'LIFT' ? (t.passive_dealer ?? '—') : t.dealer
         const protBuyerInfo  = DEALER_INFO[protBuyerCode]
         const protSellerInfo = DEALER_INFO[protSellerCode]
 
@@ -1441,6 +1442,36 @@ export default function BackendPage() {
         const upfrontReceiver = pvRaw == null ? '—'
           : pvRaw >= 0 ? (protBuyerInfo?.legal  ?? protBuyerCode)
           : (protSellerInfo?.legal ?? protSellerCode)
+
+        // ── PDF download — open clean HTML blob in new tab and auto-print ────
+        function downloadPdf() {
+          const el = document.getElementById('confirm-doc')
+          if (!el) return
+          const clone = el.cloneNode(true) as HTMLElement
+          // Strip interactive / screen-only elements
+          clone.querySelectorAll('.no-print').forEach(n => n.remove())
+          const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CMBX Confirm — ${index} — ${tradeDate}</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Georgia, "Times New Roman", serif; font-size: 13px; color: #222; background: #fff; }
+table { border-collapse: collapse; width: 100%; }
+@page { margin: 14mm 16mm; size: A4 portrait; }
+</style>
+</head>
+<body style="padding:40px 48px">
+${clone.innerHTML}
+<script>setTimeout(function(){ window.focus(); window.print(); }, 400);<\/script>
+</body>
+</html>`
+          const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+          const url  = URL.createObjectURL(blob)
+          window.open(url, '_blank')
+          setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        }
 
         const row = (label: string, value: React.ReactNode, shade: boolean) => (
           <tr style={{ background: shade ? '#f8f9fc' : '#fff' }}>
@@ -1525,6 +1556,19 @@ export default function BackendPage() {
                   {row('Maturity Date', maturity, true)}
                   {row('Effective Date', `${tradeDate}  (T+0)`, false)}
                   {row('Settlement Date', `${settlDate}  (T+3 business days)`, true)}
+                  <tr style={{ background: '#fff' }}>
+                    <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>Spread (bps)</td>
+                    <td style={{ padding: '4px 14px', borderBottom: '1px solid #efefef' }}>
+                      <input
+                        className="no-print"
+                        value={confirmSpread}
+                        onChange={e => setConfirmSpread(e.target.value)}
+                        placeholder="enter implied spread..."
+                        style={{ border: '1px solid #bbb', padding: '2px 8px', fontSize: '12.5px', fontFamily: 'Georgia, serif', width: '200px', color: '#222', borderRadius: '2px' }}
+                      />
+                      <span className="print-only" style={{ fontSize: '12.5px', fontWeight: 500 }}>{confirmSpread}</span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
 
@@ -1565,14 +1609,14 @@ export default function BackendPage() {
               {/* ── Buttons ──────────────────────────────────────────────────── */}
               <div className="no-print" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button
-                  onClick={() => window.print()}
-                  style={{ background: '#2255aa', color: '#fff', border: 'none', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', letterSpacing: '1px' }}
+                  onClick={downloadPdf}
+                  style={{ background: '#2255aa', color: '#fff', border: 'none', padding: '8px 28px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', letterSpacing: '1px', borderRadius: '2px' }}
                 >
-                  PRINT / SAVE PDF
+                  ↓ DOWNLOAD PDF
                 </button>
                 <button
                   onClick={() => setConfirmTrade(null)}
-                  style={{ background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif' }}
+                  style={{ background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', borderRadius: '2px' }}
                 >
                   CLOSE
                 </button>
