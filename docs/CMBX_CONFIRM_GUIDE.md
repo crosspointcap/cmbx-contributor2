@@ -128,7 +128,8 @@ TRADE TERMS
   Trade Price:         70.50
   Coupon (Running):    300 bps per annum (3.00% / year)
   Maturity Date:       December 17, 2058
-  Effective Date:      May 20, 2026
+  Effective Date:      May 20, 2026  (T+0)
+  Settlement Date:     May 23, 2026  (T+3 business days)
 
 UPFRONT PAYMENT (PRESENT VALUE)
   PV Amount:           $1,475,000
@@ -142,9 +143,9 @@ FACILITATION FEE
 
 ────────────────────────────────────────────────────────────────────────
 This document confirms the terms agreed between the parties above for the
-CMBX.NA.BBB-.19 trade executed on May 20, 2026. All terms are subject to
-the ISDA Master Agreement and related Schedule executed between the parties.
-Settlement T+3 business days.
+CMBX.NA.BBB-.19 trade executed on May 20, 2026. Effective date is T+0.
+Settlement date is T+3 business days (May 23, 2026). All terms are subject
+to the ISDA Master Agreement and related Schedule executed between the parties.
 ────────────────────────────────────────────────────────────────────────
 ```
 
@@ -167,4 +168,6 @@ Crosspoint facilitates the trade between Protection Buyer and Protection Seller.
 
 ## 9. Settlement
 
-All CMBX trades settle T+3 business days. The upfront PV is paid at settlement. Running coupon accrues from the effective date.
+- **Effective Date:** T+0 (trade date — the contract is live immediately)
+- **Settlement Date:** T+3 business days (upfront PV and facilitation fee are paid on settlement date)
+- Running coupon accrues from the effective date (T+0)

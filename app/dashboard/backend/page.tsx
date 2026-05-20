@@ -1400,7 +1400,14 @@ export default function BackendPage() {
         const t = confirmTrade
 
         // ── Computed fields ───────────────────────────────────────────────────
-        const tradeDate  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        const now        = new Date()
+        const tradeDate  = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        // Settlement = T+3 business days (skip weekends; no holiday calendar)
+        const settlDate  = (() => {
+          const d = new Date(now); let added = 0
+          while (added < 3) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) added++ }
+          return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        })()
         const coupon     = COUPON_BPS[t.tranche] ?? 0
         const notional   = t.trade_size ? t.trade_size * 1_000_000 : null
         const maturity   = MATURITY_DATE[t.series] ?? '—'
@@ -1516,7 +1523,8 @@ export default function BackendPage() {
                   {row('Trade Price', priceDecimal, true)}
                   {row('Coupon (Running)', `${coupon} bps per annum (${(coupon / 100).toFixed(2)}% / year)`, false)}
                   {row('Maturity Date', maturity, true)}
-                  {row('Effective Date', tradeDate, false)}
+                  {row('Effective Date', `${tradeDate}  (T+0)`, false)}
+                  {row('Settlement Date', `${settlDate}  (T+3 business days)`, true)}
                 </tbody>
               </table>
 
@@ -1551,7 +1559,7 @@ export default function BackendPage() {
 
               {/* ── Footer ───────────────────────────────────────────────────── */}
               <div style={{ fontSize: '11.5px', color: '#555', lineHeight: '1.7', marginBottom: '24px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
-                This document confirms the terms agreed between <strong>{protBuyerInfo?.legal ?? protBuyerCode}</strong> (Protection Buyer) and <strong>{protSellerInfo?.legal ?? protSellerCode}</strong> (Protection Seller) for the {index} trade executed on <strong>{tradeDate}</strong>. All terms are subject to the ISDA Master Agreement and related Schedule executed between the parties. Settlement T+3 business days.
+                This document confirms the terms agreed between <strong>{protBuyerInfo?.legal ?? protBuyerCode}</strong> (Protection Buyer) and <strong>{protSellerInfo?.legal ?? protSellerCode}</strong> (Protection Seller) for the {index} trade executed on <strong>{tradeDate}</strong>. Effective date is T+0. Settlement date is T+3 business days (<strong>{settlDate}</strong>). All terms are subject to the ISDA Master Agreement and related Schedule executed between the parties.
               </div>
 
               {/* ── Buttons ──────────────────────────────────────────────────── */}
