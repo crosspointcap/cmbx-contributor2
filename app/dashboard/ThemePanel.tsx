@@ -13,51 +13,51 @@ interface Props {
 const PRESETS: { label: string; desc: string; theme: Theme }[] = [
   {
     label: 'DARK',
-    desc:  'Black · grey text · amber',
-    theme: { bg: '#0a0a0a', fg: '#ffffff', accent: '#f0c040', bid: '#00ee55', ask: '#ff3333' },
+    desc:  'Black · pure white · amber · electric green / red',
+    theme: { bg: '#0d0d0d', fg: '#ffffff', accent: '#f0c040', bid: '#00ff66', ask: '#ff2222' },
   },
   {
     label: 'BLUE',
-    desc:  'Royal blue · white · red/orange',
-    theme: { bg: '#1055a0', fg: '#ffffff', accent: '#ffdd00', bid: '#ff7722', ask: '#ff2222' },
+    desc:  'Deep blue · pure white · yellow · orange / red',
+    theme: { bg: '#1255a8', fg: '#ffffff', accent: '#ffe600', bid: '#ff8800', ask: '#ff2200' },
   },
   {
     label: 'LIGHT',
-    desc:  'White · black text · navy',
-    theme: { bg: '#f5f5f5', fg: '#111111', accent: '#1055a0', bid: '#007722', ask: '#cc1111' },
+    desc:  'White · black · navy · dark green / dark red',
+    theme: { bg: '#ffffff', fg: '#0d0d0d', accent: '#1255a8', bid: '#006b1f', ask: '#cc0000' },
   },
 ]
 
-// ── Curated swatches — vivid, high-contrast, covers dark + light + blue ──────
+// ── Curated swatches — vivid, high-contrast ───────────────────────────────────
 const SWATCHES: Record<keyof Theme, string[]> = {
   bg: [
     // dark
-    '#0a0a0a', '#111111', '#1a1a1a',
-    // blue (TP-style)
-    '#1055a0', '#1565c0', '#0d3b7a', '#0a2a5a',
+    '#0d0d0d', '#000000', '#111827',
+    // blue
+    '#1255a8', '#1565c0', '#0d3b7a', '#0a2050',
     // light
-    '#f5f5f5', '#ffffff', '#eef2f8',
+    '#ffffff', '#f4f6f8', '#e8edf5',
   ],
   fg: [
-    // light text (for dark/blue backgrounds)
-    '#ffffff', '#eeeeee', '#cccccc', '#ddddaa',
-    // dark text (for light backgrounds)
-    '#111111', '#222222', '#333333', '#1a1a44',
+    // light (for dark/blue bg)
+    '#ffffff', '#f0f0f0', '#dddddd', '#ffffcc',
+    // dark (for light bg)
+    '#0d0d0d', '#111111', '#1a1a2e', '#1a2a1a',
   ],
   accent: [
-    '#f0c040', '#ffdd00', '#ff9900',  // golds / ambers
-    '#1055a0', '#4499ff',              // blues
-    '#00cc44', '#cc1111', '#cc44ff',   // green / red / purple
+    '#f0c040', '#ffe600', '#ff9900',  // ambers / yellows
+    '#ffffff', '#4499ff',              // white / blue
+    '#00ee55', '#ff3333', '#dd44ff',   // green / red / purple
   ],
   bid: [
-    '#00ee55', '#00cc44', '#44ff88',   // vivid greens
-    '#ff7722', '#ff9900',              // TP-style orange bids
-    '#ffffff', '#ffff00', '#44ddff',   // white / yellow / cyan
+    '#00ff66', '#00ee55', '#00cc44',   // electric greens
+    '#ff8800', '#ffaa00',              // oranges (TP-style)
+    '#ffffff', '#00ffff', '#aaff44',   // white / cyan / lime
   ],
   ask: [
-    '#ff3333', '#ff2222', '#ee0000',   // vivid reds
-    '#ff5500', '#ff7722',              // red-oranges
-    '#ffffff', '#ffaa00', '#ff44aa',   // white / amber / pink
+    '#ff2222', '#ff0000', '#ee0000',   // vivid reds
+    '#ff4400', '#ff6600',              // red-oranges
+    '#ffffff', '#ff44aa', '#ff8800',   // white / pink / orange
   ],
 }
 
@@ -186,22 +186,34 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
           </div>
         ))}
 
-        {/* ── Live preview row ── */}
+        {/* ── Live preview ── */}
         <div style={{
           margin: '16px 0 14px',
-          padding: '10px 14px',
           border: `1px solid ${draft.accent}66`,
           borderRadius: '3px',
+          overflow: 'hidden',
           background: draft.bg,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '14px',
         }}>
-          <span style={{ color: draft.accent, fontSize: '13px', fontWeight: 700 }}>CMBX.15</span>
-          <span style={{ color: draft.bid,    fontSize: '14px', fontWeight: 700 }}>85-16</span>
-          <span style={{ color: draft.fg,     fontSize: '12px', opacity: 0.35 }}>/</span>
-          <span style={{ color: draft.ask,    fontSize: '14px', fontWeight: 700 }}>86-00</span>
-          <span style={{ color: draft.fg,     fontSize: '10px', opacity: 0.4, marginLeft: 'auto' }}>preview</span>
+          {/* Section header */}
+          <div style={{ padding: '5px 12px', background: draft.accent + '18', borderBottom: `1px solid ${draft.accent}44` }}>
+            <span style={{ color: draft.accent, fontSize: '11px', fontWeight: 700, letterSpacing: '2px' }}>CMBX.15</span>
+          </div>
+          {/* Row 1 */}
+          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderBottom: `1px solid ${draft.fg}11`, gap: '8px' }}>
+            <span style={{ color: draft.fg,  fontSize: '12px', fontWeight: 700, width: '64px' }}>BBB-.15</span>
+            <span style={{ color: draft.bid, fontSize: '13px', fontWeight: 700, width: '52px', textAlign: 'right' }}>85-16</span>
+            <span style={{ color: draft.fg,  fontSize: '11px', opacity: 0.3 }}>/</span>
+            <span style={{ color: draft.ask, fontSize: '13px', fontWeight: 700, width: '52px' }}>86-00</span>
+            <span style={{ color: draft.fg,  fontSize: '11px', opacity: 0.35, marginLeft: 'auto' }}>85-24</span>
+          </div>
+          {/* Row 2 — slightly different bg for contrast check */}
+          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', gap: '8px', background: draft.fg + '08' }}>
+            <span style={{ color: draft.fg,  fontSize: '12px', fontWeight: 700, width: '64px' }}>BB.15</span>
+            <span style={{ color: draft.bid, fontSize: '13px', fontWeight: 700, width: '52px', textAlign: 'right' }}>52-08</span>
+            <span style={{ color: draft.fg,  fontSize: '11px', opacity: 0.3 }}>/</span>
+            <span style={{ color: draft.ask, fontSize: '13px', fontWeight: 700, width: '52px' }}>53-00</span>
+            <span style={{ color: draft.fg,  fontSize: '11px', opacity: 0.35, marginLeft: 'auto' }}>—</span>
+          </div>
         </div>
 
         {/* ── Action buttons ── */}
