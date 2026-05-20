@@ -9,12 +9,41 @@ interface Props {
   onClose: () => void
 }
 
+// Curated swatches per field — terminal-friendly palette
+const SWATCHES: Record<keyof Theme, string[]> = {
+  bg: [
+    '#0a0a0a', '#060606', '#111111',
+    '#0a0f0a', '#0a0a14', '#14100a',
+    '#0f0a14', '#0a1414',
+  ],
+  fg: [
+    '#cccccc', '#ffffff', '#aaaaaa',
+    '#e8e0cc', '#ccddcc', '#ddddcc',
+    '#bbbbbb', '#999999',
+  ],
+  accent: [
+    '#f0c040', '#4488ff', '#66ff88',
+    '#ff6644', '#cc88ff', '#44ddff',
+    '#ff4488', '#ffdd44',
+  ],
+  bid: [
+    '#66ff88', '#44dd66', '#88ffaa',
+    '#44ffff', '#4488ff', '#aaffcc',
+    '#ffffff', '#ffff44',
+  ],
+  ask: [
+    '#ff6666', '#ff4444', '#ff8844',
+    '#ff44aa', '#ff88cc', '#ffaa44',
+    '#ffffff', '#ff6699',
+  ],
+}
+
 const FIELDS: { key: keyof Theme; label: string; hint: string }[] = [
-  { key: 'bg',     label: 'BACKGROUND', hint: 'page & table background' },
-  { key: 'fg',     label: 'TEXT',       hint: 'main body text'          },
-  { key: 'accent', label: 'ACCENT',     hint: 'headers & borders'       },
-  { key: 'bid',    label: 'BID',        hint: 'bid prices & buy button' },
-  { key: 'ask',    label: 'OFFER',      hint: 'ask prices & sell button'},
+  { key: 'bg',     label: 'BACKGROUND', hint: 'page background'           },
+  { key: 'fg',     label: 'TEXT',       hint: 'body text'                 },
+  { key: 'accent', label: 'ACCENT',     hint: 'headers & highlights'      },
+  { key: 'bid',    label: 'BID',        hint: 'bid prices & buy button'   },
+  { key: 'ask',    label: 'OFFER',      hint: 'ask prices & sell button'  },
 ]
 
 export function ThemePanel({ theme, onSave, onClose }: Props) {
@@ -31,10 +60,11 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
         background: draft.bg,
         border: `1px solid ${draft.accent}`,
         padding: '22px 26px',
-        width: '320px',
+        width: '360px',
         fontFamily: 'Courier New, monospace',
         borderRadius: '3px',
       }}>
+
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
           <span style={{ color: draft.accent, fontSize: '13px', fontWeight: 700, letterSpacing: '2px' }}>
@@ -46,29 +76,54 @@ export function ThemePanel({ theme, onSave, onClose }: Props) {
           </button>
         </div>
 
-        {/* Colour pickers */}
+        {/* Swatch rows */}
         {FIELDS.map(({ key, label, hint }) => (
-          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-            <label style={{ color: draft.fg, fontSize: '11px', width: '90px', opacity: 0.7, letterSpacing: '1px' }}>
-              {label}
-            </label>
-            <input
-              type="color"
-              value={draft[key]}
-              onChange={e => set(key, e.target.value)}
-              style={{ width: '36px', height: '26px', border: `1px solid ${draft.accent}44`,
-                       background: 'none', cursor: 'pointer', padding: '1px', borderRadius: '2px' }}
-            />
-            <span style={{ color: draft[key], fontSize: '11px', fontFamily: 'Courier New', minWidth: '60px' }}>
-              {draft[key]}
-            </span>
-            <span style={{ color: draft.fg, fontSize: '10px', opacity: 0.35 }}>{hint}</span>
+          <div key={key} style={{ marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '5px' }}>
+              <span style={{ color: draft.fg, fontSize: '10px', letterSpacing: '1px', opacity: 0.6, width: '90px' }}>
+                {label}
+              </span>
+              <span style={{ color: draft.fg, fontSize: '10px', opacity: 0.3 }}>{hint}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {SWATCHES[key].map(color => {
+                const isSelected = draft[key] === color
+                return (
+                  <button
+                    key={color}
+                    onClick={() => set(key, color)}
+                    title={color}
+                    style={{
+                      width: '26px', height: '26px',
+                      background: color,
+                      border: isSelected ? `2px solid ${draft.accent}` : '2px solid transparent',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      outline: isSelected ? `1px solid ${draft.bg}` : 'none',
+                      outlineOffset: '-3px',
+                    }}
+                  />
+                )
+              })}
+              {/* Current value chip — shows selected hex, click to keep */}
+              <span style={{
+                color: draft[key],
+                fontSize: '10px',
+                fontFamily: 'Courier New, monospace',
+                opacity: 0.7,
+                marginLeft: '2px',
+                minWidth: '52px',
+              }}>
+                {draft[key]}
+              </span>
+            </div>
           </div>
         ))}
 
         {/* Preview swatch */}
         <div style={{
-          margin: '14px 0',
+          margin: '16px 0 12px',
           padding: '8px 12px',
           border: `1px solid ${draft.accent}44`,
           borderRadius: '2px',
