@@ -1448,29 +1448,35 @@ export default function BackendPage() {
           const el = document.getElementById('confirm-doc')
           if (!el) return
           const clone = el.cloneNode(true) as HTMLElement
-          // Strip interactive / screen-only elements
           clone.querySelectorAll('.no-print').forEach(n => n.remove())
-          const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>CMBX Confirm — ${index} — ${tradeDate}</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Georgia, "Times New Roman", serif; font-size: 13px; color: #222; background: #fff; }
-table { border-collapse: collapse; width: 100%; }
-@page { margin: 14mm 16mm; size: A4 portrait; }
-</style>
-</head>
-<body style="padding:40px 48px">
-${clone.innerHTML}
-<script>setTimeout(function(){ window.focus(); window.print(); }, 400);<\/script>
-</body>
-</html>`
-          const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-          const url  = URL.createObjectURL(blob)
-          window.open(url, '_blank')
-          setTimeout(() => URL.revokeObjectURL(url), 60_000)
+
+          const css = `
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Georgia, "Times New Roman", serif; font-size: 13px;
+                   color: #222; background: #fff; padding: 40px 48px; }
+            table { border-collapse: collapse; width: 100%; }
+            @page { margin: 14mm 16mm; size: A4 portrait; }
+          `
+
+          // Write into a hidden iframe and trigger print — avoids popup blockers
+          const iframe = document.createElement('iframe')
+          Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: 'none' })
+          document.body.appendChild(iframe)
+
+          const doc = iframe.contentDocument ?? iframe.contentWindow?.document
+          if (!doc) { document.body.removeChild(iframe); return }
+          doc.open()
+          doc.write(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+            <title>CMBX Confirm — ${index} — ${tradeDate}</title>
+            <style>${css}</style></head><body>${clone.innerHTML}</body></html>`)
+          doc.close()
+
+          // Give browser a moment to render, then print and clean up
+          setTimeout(() => {
+            iframe.contentWindow?.focus()
+            iframe.contentWindow?.print()
+            setTimeout(() => document.body.removeChild(iframe), 2000)
+          }, 300)
         }
 
         const row = (label: string, value: React.ReactNode, shade: boolean) => (
