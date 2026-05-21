@@ -600,13 +600,13 @@ export default function BackendPage() {
       mode,
       [field]: numericValue,
     }
-    if (field === 'bid' && dealer) update.bid_dealer = dealer
-    if (field === 'ask' && dealer) update.ask_dealer = dealer
+    if (field === 'bid') update.bid_dealer = numericValue != null ? (dealer ?? null) : null
+    if (field === 'ask') update.ask_dealer = numericValue != null ? (dealer ?? null) : null
 
-    // Auto-fill default size if entering a price and size is currently empty
+    // Clearing a price also clears its size; entering a price auto-fills size if empty
     const defSize = String(DEFAULT_SIZE[trancheName] ?? 5)
-    if (field === 'bid' && trimmed !== '' && existing?.bid_size == null) update.bid_size = defSize
-    if (field === 'ask' && trimmed !== '' && existing?.ask_size == null) update.ask_size = defSize
+    if (field === 'bid') update.bid_size = numericValue == null ? null : (existing?.bid_size ?? defSize)
+    if (field === 'ask') update.ask_size = numericValue == null ? null : (existing?.ask_size ?? defSize)
 
     await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
 
