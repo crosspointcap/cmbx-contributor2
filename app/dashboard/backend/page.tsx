@@ -5,6 +5,9 @@ import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import * as XLSX from 'xlsx'
 import { fmt32nds, formatPx, fmtTime, parse32nds, buildGhostMap, mergeGhost, GhostMap } from '../../../lib/utils'
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
+import { ThemePanel } from '../ThemePanel'
+import { scheduleEodLogout } from '../../../lib/eod-logout'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,20 +44,21 @@ const COUPON_BPS: Record<string, number> = {
 }
 
 const MATURITY_DATE: Record<string, string> = {
-  '6':  'February 17, 2047',
-  '7':  'September 17, 2047',
+  '6':  'May 11, 2063',
+  '7':  'January 17, 2047',
   '8':  'October 17, 2057',
   '9':  'September 17, 2058',
   '10': 'November 17, 2059',
-  '11': 'November 17, 2059',
+  '11': 'November 18, 2054',
   '12': 'August 17, 2061',
-  '13': 'December 17, 2072',
-  '14': 'September 17, 2062',
-  '15': 'November 17, 2064',
-  '16': 'November 17, 2065',
-  '17': 'January 17, 2066',
-  '18': 'January 17, 2067',
-  '19': 'December 17, 2072',
+  '13': 'December 16, 2072',
+  '14': 'December 16, 2072',
+  '15': 'November 18, 2064',
+  '16': 'April 17, 2065',
+  '17': 'December 15, 2056',
+  '18': 'December 18, 2057',
+  '19': 'December 17, 2058',
+  '20': 'January 17, 2073',
 }
 
 const DEALER_INFO: Record<string, { legal: string; address: string; phone?: string; email: string }> = {
@@ -213,43 +217,67 @@ function mapTrade(t: any): BlotterTrade {
   }
 }
 
-// Parse pasted bulk price text. Supports two formats:
-//   Format A (SERIES BID/ASK): "-19 92-12/93-00"   ← primary format
-//   Format B (BID/ASK SERIES): "84-24/85-24 -15"   ← legacy format
-// Series can be positive or negative (abs value used). Supports 32nds, dollar, or spread.
-function parseBulkLines(text: string): Array<{ series: string; bid: number; ask: number; mode: string }> {
-  const results: Array<{ series: string; bid: number; ask: number; mode: string }> = []
+// ── Bulk price parser ─────────────────────────────────────────────────────
+// Flexible format — any token containing '/' is a price, any plain integer
+// (or t-prefixed integer) is a series number. Tokens are paired in order.
+//
+// Supported per-line formats:
+//   Full:      "91-20/92-04 -18"     bid+ask, series at end
+//              "-18 91-20/92-04"     bid+ask, series at start
+//   Bid only:  "92-06/ -19"          bid only (ask side blank)
+//   Ask only:  "/91-26 -18"          ask only (bid side blank)
+//   Multi:     "/91-26 /85-18 -18 -17"  two ask-only rows on one line
+//   t-prefix:  "60/ t16"             series written as t16 → series 16
+//   Modes:     32nds (92-06), dollar ($85.50), spread (285)
+
+function _parsePriceTok(tok: string): { bid: number | null; ask: number | null; mode: string } | null {
+  const slashIdx = tok.indexOf('/')
+  if (slashIdx === -1) return null
+  const bidStr = tok.slice(0, slashIdx).trim()
+  const askStr = tok.slice(slashIdx + 1).trim()
+  const sample = (bidStr || askStr).replace('$', '')
+  if (!sample) return null
+  const mode = /^\d+-\d{1,2}$/.test(sample) ? 'ticks'
+             : (bidStr || askStr).startsWith('$') ? 'price'
+             : 'spread'
+  const parsePx = (s: string): number | null => {
+    if (!s) return null
+    const clean = s.replace('$', '').trim()
+    if (!clean) return null
+    return mode === 'ticks' ? parse32nds(clean) : (parseFloat(clean) || null)
+  }
+  const bid = parsePx(bidStr)
+  const ask = parsePx(askStr)
+  if (bid == null && ask == null) return null
+  return { bid, ask, mode }
+}
+
+function parseBulkLines(text: string): Array<{ series: string; bid: number | null; ask: number | null; mode: string }> {
+  const results: Array<{ series: string; bid: number | null; ask: number | null; mode: string }> = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (!line) continue
-
-    let bidStr: string, askStr: string, seriesPart: string
-
-    // Format A: SERIES BID/ASK  e.g. "-19 92-12/93-00"
-    const mA = line.match(/^(-?\d+)\s+(\S+)\/(\S+)$/)
-    // Format B: BID/ASK SERIES  e.g. "84-24/85-24 -15"
-    const mB = line.match(/^(\S+)\/(\S+)\s+(-?\d+)$/)
-
-    if (mA) {
-      [, seriesPart, bidStr, askStr] = mA
-    } else if (mB) {
-      [, bidStr, askStr, seriesPart] = mB
-    } else {
-      continue
+    const tokens = line.match(/\S+/g) || []
+    const priceToks: string[] = []
+    const seriesNums: number[] = []
+    for (const tok of tokens) {
+      if (tok.includes('/')) {
+        priceToks.push(tok)
+      } else {
+        // Accept: -19, 19, t19, T19
+        const m = tok.match(/^-?(\d+)$/) || tok.match(/^[tT](\d+)$/)
+        if (m) {
+          const n = parseInt(m[1], 10)
+          if (n > 0) seriesNums.push(n)
+        }
+      }
     }
-
-    const seriesNum = Math.abs(parseInt(seriesPart, 10))
-    if (!seriesNum || isNaN(seriesNum)) continue
-    const mode = /^\d+-\d{1,2}$/.test(bidStr) ? 'ticks'
-               : bidStr.startsWith('$')        ? 'price'
-               :                                 'spread'
-    const parsePx = (s: string) =>
-      mode === 'ticks' ? parse32nds(s.replace('$', ''))
-                       : (parseFloat(s.replace('$', '')) || null)
-    const bid = parsePx(bidStr)
-    const ask = parsePx(askStr)
-    if (bid == null || ask == null) continue
-    results.push({ series: String(seriesNum), bid, ask, mode })
+    if (priceToks.length === 0 || seriesNums.length === 0) continue
+    const count = Math.min(priceToks.length, seriesNums.length)
+    for (let i = 0; i < count; i++) {
+      const px = _parsePriceTok(priceToks[i])
+      if (px) results.push({ series: String(seriesNums[i]), ...px })
+    }
   }
   return results
 }
@@ -279,8 +307,7 @@ export default function BackendPage() {
   const errorTimer       = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
-  const [confirmTrade, setConfirmTrade] = useState<BlotterTrade | null>(null)
-  const [confirmUpfront, setConfirmUpfront] = useState('')
+  const [confirmTrade,  setConfirmTrade]  = useState<BlotterTrade | null>(null)
   const [confirmSpread, setConfirmSpread] = useState('')
   const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
   const [showBulkInput, setShowBulkInput] = useState(false)
@@ -289,6 +316,8 @@ export default function BackendPage() {
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
+  const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
+  const [showSettings, setShowSettings] = useState(false)
   const [cdxLiveHy,    setCdxLiveHy]    = useState<number | null>(null)
   const [autoAdjMsg,   setAutoAdjMsg]   = useState<string>('')
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
@@ -316,27 +345,12 @@ export default function BackendPage() {
   selectedDealerRef.current = selectedDealer
   selectedRowRef.current    = selectedRow
 
-  // Auth check
+  // Load theme + schedule EOD redirect
   useEffect(() => {
-    async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        window.location.href = '/login'
-        return
-      }
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single()
-
-      if (!prof || prof.role !== 'trader') {
-        window.location.href = '/dashboard/market'
-        return
-      }
-      setAuthChecked(true)
-    }
-    checkAuth()
+    setTheme(loadTheme())
+    setAuthChecked(true)
+    const cancelEod = scheduleEodLogout(() => { window.location.href = '/dashboard/backend' })
+    return () => cancelEod()
   }, [])
 
   useEffect(() => {
@@ -387,7 +401,7 @@ export default function BackendPage() {
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const entry = mapTrade(payload.new)
-        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green')
+        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green', 30000)
         setTradeLog(entry)
         setBlotterTrades(prev => [entry, ...prev])
       })
@@ -490,14 +504,14 @@ export default function BackendPage() {
     }
   }, [authChecked])
 
-  function flashRowEffect(key: string, color: 'red' | 'green') {
+  function flashRowEffect(key: string, color: 'red' | 'green', durationMs = 3000) {
     // Clear any existing timer for this row before starting a new one
     if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
     setFlashRows(prev => ({ ...prev, [key]: color }))
     flashTimers.current[key] = setTimeout(() => {
       setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
       delete flashTimers.current[key]
-    }, 20000)
+    }, durationMs)
   }
 
   function handleDealerClick(code: string) {
@@ -706,7 +720,8 @@ export default function BackendPage() {
     }
 
     if (adjCount > 0) {
-      const dir   = Object.values(snaps)[0] ? (newCdxHy > Object.values(snaps)[0].cdxHyAtEntry ? '↑' : '↓') : ''
+      const firstSnap = Object.values(snaps)[0]
+      const dir = firstSnap ? (newCdxHy > firstSnap.cdxHyAtEntry ? '↑' : '↓') : ''
       setAutoAdjMsg(`[${fmtTime(new Date().toISOString())}] AUTO-ADJ ${adjCount} MS price${adjCount !== 1 ? 's' : ''} — CDX HY ${dir}${newCdxHy.toFixed(2)}`)
     }
   }
@@ -728,17 +743,21 @@ export default function BackendPage() {
     const sz = bulkSize.trim() || String(DEFAULT_SIZE[bulkTranche] ?? 5)
     try {
       for (const r of parsedBulk) {
-        await supabase.from('prices').upsert({
-          series_number: r.series, tranche_name: bulkTranche,
-          bid: r.bid, ask: r.ask,
-          bid_dealer: dealer, ask_dealer: dealer,
-          bid_size: sz, ask_size: sz,
-          mode: r.mode,
-        }, { onConflict: 'series_number,tranche_name' })
-        supabase.from('price_changes').insert([
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
-          { series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig },
-        ]).then(({ error }) => { if (error) console.warn('[bulk price_changes]', error.message) })
+        // Only write the sides that are actually present (supports one-sided quotes)
+        const upsertRow: Record<string, unknown> = {
+          series_number: r.series, tranche_name: bulkTranche, mode: r.mode,
+        }
+        if (r.bid != null) { upsertRow.bid = r.bid; upsertRow.bid_dealer = dealer; upsertRow.bid_size = sz }
+        if (r.ask != null) { upsertRow.ask = r.ask; upsertRow.ask_dealer = dealer; upsertRow.ask_size = sz }
+        const { error: priceErr } = await supabase.from('prices').upsert(upsertRow, { onConflict: 'series_number,tranche_name' })
+        if (priceErr) console.warn('[bulk upsert]', priceErr.message)
+        const auditRows: object[] = []
+        if (r.bid != null) auditRows.push({ series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        if (r.ask != null) auditRows.push({ series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        if (auditRows.length > 0) {
+          const { error: auditErr } = await supabase.from('price_changes').insert(auditRows)
+          if (auditErr) console.warn('[bulk price_changes]', auditErr.message)
+        }
       }
       // MS bulk — snapshot CDX HY for every submitted row
       if (dealer === 'MS' && latestCdxRef.current.hy != null) {
@@ -820,7 +839,7 @@ export default function BackendPage() {
 
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
-    flashRowEffect(rowKey, isHit ? 'red' : 'green')
+    flashRowEffect(rowKey, isHit ? 'red' : 'green', 30000)
   }
 
   function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties) {
@@ -888,8 +907,16 @@ export default function BackendPage() {
     )
   }
 
+  function handleSaveTheme(t: Theme) {
+    setTheme(t)
+    setShowSettings(false)
+    saveTheme(t)
+  }
+
   return (
-    <div style={{ background: '#0a0a0a', color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ background: theme.bg, color: theme.fg, fontFamily: 'Courier New, monospace', fontSize: '15px', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
       <style>{`
         @keyframes shake {
           0%,100%{transform:translateX(0)}
@@ -906,7 +933,7 @@ export default function BackendPage() {
 
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
-        <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
+        <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX — CROSSPOINT CAPITAL
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -937,21 +964,6 @@ export default function BackendPage() {
             MARKET
           </a>
           <button
-            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-            style={{
-              background: 'transparent',
-              color: '#555',
-              border: '1px solid #2a2a2a',
-              padding: '2px 8px',
-              fontSize: '15px',
-              fontFamily: 'Courier New, monospace',
-              cursor: 'pointer',
-              borderRadius: '2px',
-            }}
-          >
-            SIGN OUT
-          </button>
-          <button
             onClick={() => setShowBlotter(p => !p)}
             style={{
               background: showBlotter ? '#1a1500' : 'transparent',
@@ -970,7 +982,7 @@ export default function BackendPage() {
       </div>
 
       {/* Nav tabs */}
-      <NavTabs active="admin" isTrader={true} />
+      <NavTabs active="admin" isTrader={true} accent={theme.accent} bg={theme.bg} fg={theme.fg} onSettings={() => setShowSettings(true)} />
 
       {/* Dealer + action — single combined row */}
       <div style={{ display: 'flex', alignItems: 'flex-end', padding: '3px 10px', gap: '3px', borderBottom: '1px solid #1e1e1e', flexShrink: 0, flexWrap: 'wrap' }}>
@@ -1011,11 +1023,11 @@ export default function BackendPage() {
 
         {/* HIT / LIFT / BULK */}
         <button onClick={() => executeTrade('hit')}
-          style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: hitShake ? 'shake 0.5s ease' : 'none' }}>
+          style={{ background: theme.ask + '22', color: theme.ask, border: `1px solid ${theme.ask}88`, padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: hitShake ? 'shake 0.5s ease' : 'none' }}>
           HIT
         </button>
         <button onClick={() => executeTrade('lift')}
-          style={{ background: '#003a00', color: '#66ff88', border: '1px solid #338833', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: liftShake ? 'shake 0.5s ease' : 'none' }}>
+          style={{ background: theme.bid + '22', color: theme.bid, border: `1px solid ${theme.bid}88`, padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: liftShake ? 'shake 0.5s ease' : 'none' }}>
           LIFT
         </button>
         <button onClick={() => setShowBulkInput(true)}
@@ -1048,11 +1060,11 @@ export default function BackendPage() {
       <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px' }}>
           <thead>
-            <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: '#0a0a0a', zIndex: 1 } as React.CSSProperties}>
+            <tr style={{ color: '#ffffff', fontSize: '15px', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
               <th style={{ textAlign: 'left',   padding: '3px 8px 3px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
               <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
-              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: '2px solid #66ff88', minWidth: '100px', fontWeight: 700 }}>BID</th>
-              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: '2px solid #ff6666', minWidth: '100px', fontWeight: 700 }}>OFFER</th>
+              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: `2px solid ${theme.bid}`, minWidth: '100px', fontWeight: 700 }}>BID</th>
+              <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: `2px solid ${theme.ask}`, minWidth: '100px', fontWeight: 700 }}>OFFER</th>
               <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
               <th style={{ textAlign: 'right',  padding: '3px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
               <th style={{ textAlign: 'right',  padding: '3px 12px 3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
@@ -1072,7 +1084,7 @@ export default function BackendPage() {
                     colSpan={7}
                     style={{
                       padding: '8px 12px 5px 10px',
-                      color: '#f0c040',
+                      color: theme.accent,
                       background: '#0e0e0e',
                       fontSize: '15px',
                       fontWeight: 600,
@@ -1187,7 +1199,7 @@ export default function BackendPage() {
       {/* Blotter panel */}
       {showBlotter && (
         <div style={{ width: '300px', borderLeft: '1px solid #1e1e1e', background: '#080808', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: '#f0c040', fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e1e1e', color: theme.accent, fontSize: '13px', letterSpacing: '2px', fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>TRADE BLOTTER</span>
             <span style={{ color: '#444', fontSize: '11px', fontWeight: 400 }}>{blotterTrades.length} trades</span>
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -1241,7 +1253,7 @@ export default function BackendPage() {
                   </div>
                   <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
                     <button
-                      onClick={() => { setConfirmTrade(t); setConfirmUpfront(''); setConfirmSpread('') }}
+                      onClick={() => { setConfirmTrade(t); setConfirmSpread('') }}
                       style={{ flex: 1, background: '#0f0f00', color: '#f0c040', border: '1px solid #333300', padding: '2px 0', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', letterSpacing: '1px', borderRadius: '2px' }}
                     >
                       VIEW CONFIRM
@@ -1270,7 +1282,7 @@ export default function BackendPage() {
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <span style={{ color: '#f0c040', fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>BULK PRICE INPUT</span>
+              <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>BULK PRICE INPUT</span>
               <button onClick={() => setShowBulkInput(false)} style={{ background: 'transparent', border: 'none', color: '#555', fontSize: '18px', cursor: 'pointer', fontFamily: 'Courier New', padding: '0 4px' }}>×</button>
             </div>
 
@@ -1387,146 +1399,235 @@ export default function BackendPage() {
       {/* Confirmation Modal */}
       {confirmTrade && (() => {
         const t = confirmTrade
-        const tradeDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: '2-digit' })
-        const coupon = COUPON_BPS[t.tranche] ?? 0
-        const couponPct = (coupon / 100).toFixed(2)
-        const notional = t.trade_size ? t.trade_size * 1_000_000 : null
-        const notionalFmt = notional ? `$${notional.toLocaleString()}` : '—'
-        const maturity = MATURITY_DATE[t.series] ?? '—'
-        const index = `CMBX.NA.${t.tranche}.${t.series}`
-        const feePerMM = FACILITATION_FEE_PER_MM[t.tranche] ?? 115
-        const facFee = notional ? `$${(notional / 1_000_000 * feePerMM).toLocaleString()}` : '—'
 
-        // LIFT: dealer lifts offer → dealer buys risk; passive (offerer) sells risk
-        // HIT:  dealer hits bid   → dealer sells risk; passive (bidder) buys risk
-        const riskBuyerCode  = t.action === 'LIFT' ? t.dealer : (t.passive_dealer ?? '—')
-        const riskSellerCode = t.action === 'LIFT' ? (t.passive_dealer ?? '—') : t.dealer
-        const riskBuyerInfo  = DEALER_INFO[riskBuyerCode]
-        const riskSellerInfo = DEALER_INFO[riskSellerCode]
+        // ── Computed fields ───────────────────────────────────────────────────
+        const now        = new Date()
+        const tradeDate  = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        // Settlement = T+3 business days (skip weekends; no holiday calendar)
+        const settlDate  = (() => {
+          const d = new Date(now); let added = 0
+          while (added < 3) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) added++ }
+          return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        })()
+        const coupon     = COUPON_BPS[t.tranche] ?? 0
+        const notional   = t.trade_size ? t.trade_size * 1_000_000 : null
+        const maturity   = MATURITY_DATE[t.series] ?? '—'
+        const index      = `CMBX.NA.${t.tranche}.${t.series}`
+        const feePerMM   = FACILITATION_FEE_PER_MM[t.tranche] ?? 115
+        const facFee     = notional ? `$${(notional / 1_000_000 * feePerMM).toLocaleString()}` : '—'
+        const priceDecimal = t.price != null ? t.price.toFixed(2) : '—'
+
+        // ── Protection Buyer = Seller of Risk (SHORT) ─────────────────────────
+        // LIFT: active dealer lifts ask → active = Protection Buyer (Seller of Risk)
+        //                                 passive = Protection Seller (Buyer of Risk)
+        // HIT:  active dealer hits bid  → active = Protection Seller (Buyer of Risk)
+        //                                 passive = Protection Buyer (Seller of Risk)
+        const protBuyerCode  = t.action === 'LIFT' ? t.dealer              : (t.passive_dealer ?? '—')
+        const protSellerCode = t.action === 'LIFT' ? (t.passive_dealer ?? '—') : t.dealer
+        const protBuyerInfo  = DEALER_INFO[protBuyerCode]
+        const protSellerInfo = DEALER_INFO[protSellerCode]
+
+        // ── Upfront PV: (100 − Price) / 100 × Notional ───────────────────────
+        // Positive (price < 100): Protection Seller pays to Protection Buyer
+        // Negative (price > 100): Protection Buyer pays to Protection Seller
+        const pvRaw      = (t.price != null && notional) ? ((100 - t.price) / 100) * notional : null
+        const pvFmt      = pvRaw != null ? `$${Math.round(Math.abs(pvRaw)).toLocaleString()}` : '—'
+        const pvCalcStr  = (t.price != null && notional)
+          ? `(100.00 − ${t.price.toFixed(2)}) / 100 × $${notional.toLocaleString()}`
+          : ''
+        // Who pays / receives
+        const upfrontPayer    = pvRaw == null ? '—'
+          : pvRaw >= 0 ? (protSellerInfo?.legal ?? protSellerCode)  // price ≤ 100: Prot Seller pays
+          : (protBuyerInfo?.legal  ?? protBuyerCode)                // price > 100: Prot Buyer pays
+        const upfrontReceiver = pvRaw == null ? '—'
+          : pvRaw >= 0 ? (protBuyerInfo?.legal  ?? protBuyerCode)
+          : (protSellerInfo?.legal ?? protSellerCode)
+
+        // ── PDF download — open clean HTML blob in new tab and auto-print ────
+        function downloadPdf() {
+          const el = document.getElementById('confirm-doc')
+          if (!el) return
+          const clone = el.cloneNode(true) as HTMLElement
+          clone.querySelectorAll('.no-print').forEach(n => n.remove())
+
+          const css = `
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Georgia, "Times New Roman", serif; font-size: 13px;
+                   color: #222; background: #fff; padding: 40px 48px; }
+            table { border-collapse: collapse; width: 100%; }
+            @page { margin: 14mm 16mm; size: A4 portrait; }
+          `
+
+          // Write into a hidden iframe and trigger print — avoids popup blockers
+          const iframe = document.createElement('iframe')
+          Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: 'none' })
+          document.body.appendChild(iframe)
+
+          const doc = iframe.contentDocument ?? iframe.contentWindow?.document
+          if (!doc) { document.body.removeChild(iframe); return }
+          doc.open()
+          doc.write(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+            <title>CMBX Confirm — ${index} — ${tradeDate}</title>
+            <style>${css}</style></head><body>${clone.innerHTML}</body></html>`)
+          doc.close()
+
+          // Give browser a moment to render, then print and clean up
+          setTimeout(() => {
+            iframe.contentWindow?.focus()
+            iframe.contentWindow?.print()
+            setTimeout(() => document.body.removeChild(iframe), 2000)
+          }, 300)
+        }
+
+        const row = (label: string, value: React.ReactNode, shade: boolean) => (
+          <tr style={{ background: shade ? '#f8f9fc' : '#fff' }}>
+            <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>{label}</td>
+            <td style={{ padding: '6px 14px', fontWeight: 500, borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>{value}</td>
+          </tr>
+        )
 
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '20px' }}>
-            <div id="confirm-doc" style={{ background: '#fff', width: '750px', padding: '48px 56px', fontFamily: 'Georgia, serif', fontSize: '13px', color: '#222', lineHeight: '1.6', flexShrink: 0 }}>
+            <div id="confirm-doc" style={{ background: '#fff', width: '760px', padding: '44px 52px', fontFamily: 'Georgia, serif', fontSize: '13px', color: '#222', lineHeight: '1.6', flexShrink: 0 }}>
 
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+              {/* ── Header ───────────────────────────────────────────────────── */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
                 <div>
-                  <div style={{ color: '#2255aa', fontSize: '14px', marginBottom: '2px' }}>CMBX Trade Confirmation</div>
-                  <div style={{ color: '#2255aa', fontSize: '14px' }}>Trade Date: {tradeDate}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#111', marginBottom: '3px' }}>CMBX Trade Confirmation</div>
+                  <div style={{ color: '#666', fontSize: '13px' }}>Trade Date: {tradeDate}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-1px', color: '#111' }}>CROSS<span style={{ color: '#e03020' }}>✕</span>POINT</div>
+                  <div style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-1px', color: '#111' }}>
+                    CROSS<span style={{ color: '#e03020' }}>✕</span>POINT
+                  </div>
                   <div style={{ fontSize: '11px', color: '#888', letterSpacing: '2px' }}>C A P I T A L</div>
                 </div>
               </div>
 
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+              {/* ── Reference banner ─────────────────────────────────────────── */}
+              <div style={{ background: '#f0f4fb', padding: '10px 16px', borderLeft: '4px solid #2255aa', marginBottom: '22px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <span style={{ fontWeight: 700, fontSize: '15px', color: '#2255aa' }}>{index}</span>
+                <span style={{ color: '#555', fontSize: '12px' }}>Maturity: {maturity}</span>
+                <span style={{ color: '#555', fontSize: '12px' }}>Coupon: {coupon} bps/yr</span>
+              </div>
 
-              {/* Parties */}
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Parties to the Transaction:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
-                <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #eee' }}>
-                  <span style={{ fontWeight: 700, color: '#1a6622' }}>● BUYER OF RISK ({riskBuyerCode}):</span><br />
-                  <span style={{ fontWeight: 700 }}>{riskBuyerInfo?.legal ?? riskBuyerCode}</span><br />
-                  {riskBuyerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
-                  {riskBuyerInfo?.phone && <span>Phone: {riskBuyerInfo.phone}<br /></span>}
-                  {riskBuyerInfo && <span>Email: {riskBuyerInfo.email}</span>}
+              {/* ── Parties ──────────────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Parties to the Transaction</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', fontSize: '12.5px', border: '1px solid #e0e0e0' }}>
+                <tbody>
+                  <tr style={{ background: '#fff6f6' }}>
+                    <td style={{ padding: '12px 14px', borderBottom: '1px solid #e0e0e0', width: '210px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, color: '#881111' }}>Protection Buyer</div>
+                      <div style={{ color: '#666', fontSize: '11px', marginTop: '2px' }}>Seller of Risk · Short Credit</div>
+                      <div style={{ color: '#881111', fontSize: '11px', marginTop: '4px' }}>Pays: {coupon} bps/yr running</div>
+                      <div style={{ color: '#1a6622', fontSize: '11px', fontWeight: 700 }}>Receives: upfront PV</div>
+                    </td>
+                    <td style={{ padding: '12px 14px', borderBottom: '1px solid #e0e0e0', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700 }}>{protBuyerInfo?.legal ?? protBuyerCode}</div>
+                      <div style={{ color: '#555', fontSize: '12px' }}>
+                        {protBuyerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                      </div>
+                      {protBuyerInfo?.phone && <div style={{ color: '#555', fontSize: '12px' }}>Tel: {protBuyerInfo.phone}</div>}
+                      {protBuyerInfo?.email && <div style={{ color: '#555', fontSize: '12px' }}>Email: {protBuyerInfo.email}</div>}
+                    </td>
+                  </tr>
+                  <tr style={{ background: '#f6fff6' }}>
+                    <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, color: '#1a6622' }}>Protection Seller</div>
+                      <div style={{ color: '#666', fontSize: '11px', marginTop: '2px' }}>Buyer of Risk · Long Credit</div>
+                      <div style={{ color: '#1a6622', fontSize: '11px', marginTop: '4px', fontWeight: 700 }}>Receives: {coupon} bps/yr running</div>
+                      <div style={{ color: '#881111', fontSize: '11px' }}>Pays: upfront PV</div>
+                    </td>
+                    <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700 }}>{protSellerInfo?.legal ?? protSellerCode}</div>
+                      <div style={{ color: '#555', fontSize: '12px' }}>
+                        {protSellerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
+                      </div>
+                      {protSellerInfo?.phone && <div style={{ color: '#555', fontSize: '12px' }}>Tel: {protSellerInfo.phone}</div>}
+                      {protSellerInfo?.email && <div style={{ color: '#555', fontSize: '12px' }}>Email: {protSellerInfo.email}</div>}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* ── Trade Terms ───────────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Trade Terms</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', border: '1px solid #e0e0e0' }}>
+                <tbody>
+                  {row('Index', index, false)}
+                  {row('Trade Type', 'Credit Default Swap (CDS) — ISDA Standard Terms', true)}
+                  {row('Notional Amount', notional ? `$${notional.toLocaleString()}` : '—', false)}
+                  {row('Trade Price', priceDecimal, true)}
+                  {row('Coupon (Running)', `${coupon} bps per annum (${(coupon / 100).toFixed(2)}% / year)`, false)}
+                  {row('Maturity Date', maturity, true)}
+                  {row('Effective Date', `${tradeDate}  (T+0)`, false)}
+                  {row('Settlement Date', `${settlDate}  (T+3 business days)`, true)}
+                  <tr style={{ background: '#fff' }}>
+                    <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>Spread (bps)</td>
+                    <td style={{ padding: '4px 14px', borderBottom: '1px solid #efefef' }}>
+                      <input
+                        className="no-print"
+                        value={confirmSpread}
+                        onChange={e => setConfirmSpread(e.target.value)}
+                        placeholder="enter implied spread..."
+                        style={{ border: '1px solid #bbb', padding: '2px 8px', fontSize: '12.5px', fontFamily: 'Georgia, serif', width: '200px', color: '#222', borderRadius: '2px' }}
+                      />
+                      <span className="print-only" style={{ fontSize: '12.5px', fontWeight: 500 }}>{confirmSpread}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* ── Upfront Payment ───────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Upfront Payment (Present Value)</div>
+              <div style={{ border: '1px solid #d0d8ee', background: '#f4f7fb', padding: '14px 18px', marginBottom: '22px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                  <span style={{ color: '#444', fontSize: '12.5px' }}>PV Amount:</span>
+                  <span style={{ fontWeight: 700, fontSize: '18px', color: '#111' }}>{pvFmt}</span>
                 </div>
-                <div>
-                  <span style={{ fontWeight: 700, color: '#881111' }}>● SELLER OF RISK ({riskSellerCode}):</span><br />
-                  <span style={{ fontWeight: 700 }}>{riskSellerInfo?.legal ?? riskSellerCode}</span><br />
-                  {riskSellerInfo?.address.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}
-                  {riskSellerInfo?.phone && <span>Phone: {riskSellerInfo.phone}<br /></span>}
-                  {riskSellerInfo && <span>Email: {riskSellerInfo.email}</span>}
+                {pvCalcStr && (
+                  <div style={{ color: '#888', fontSize: '11px', marginBottom: '10px', fontFamily: 'Courier New, monospace' }}>
+                    {pvCalcStr}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '4px', fontSize: '12.5px' }}>
+                  <span style={{ color: '#555' }}>Payable by:</span>
+                  <span style={{ fontWeight: 600, color: '#881111' }}>{upfrontPayer}</span>
+                  <span style={{ color: '#555' }}>Payable to:</span>
+                  <span style={{ fontWeight: 600, color: '#1a6622' }}>{upfrontReceiver}</span>
                 </div>
               </div>
 
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
+              {/* ── Facilitation Fee ──────────────────────────────────────────── */}
+              <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Facilitation Fee</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', border: '1px solid #e0e0e0' }}>
+                <tbody>
+                  {row('Charged by', 'Crosspoint Capital', false)}
+                  {row('Amount', facFee, true)}
+                </tbody>
+              </table>
 
-              {/* Trade Details */}
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Trade Details:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>
-                <div>● <strong>Index:</strong> {index}</div>
-                <div>● <strong>Notional Amount:</strong> {notionalFmt}</div>
-                <div>● <strong>Price:</strong> {formatPx(t.price, null)}</div>
-                <div>● <strong>Strike/Coupon:</strong> {coupon} basis points ({couponPct}%)</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ● <strong>Spread:</strong>
-                  <input
-                    className="no-print"
-                    value={confirmSpread}
-                    onChange={e => setConfirmSpread(e.target.value)}
-                    placeholder="enter spread..."
-                    style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
-                  />
-                  <span className="print-only" style={{ display: 'none', borderBottom: '1px solid #333', minWidth: '160px', paddingBottom: '2px', fontSize: '13px' }}>
-                    {confirmSpread}
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ● <strong>Upfront Fee (PV):</strong>
-                  <input
-                    className="no-print"
-                    value={confirmUpfront}
-                    onChange={e => setConfirmUpfront(e.target.value)}
-                    placeholder="enter PV..."
-                    style={{ border: '1px solid #aaa', padding: '1px 6px', fontSize: '13px', fontFamily: 'Georgia, serif', width: '140px', color: '#222' }}
-                  />
-                  <span className="print-only" style={{ display: 'none', borderBottom: '1px solid #333', minWidth: '160px', paddingBottom: '2px', fontSize: '13px' }}>
-                    {confirmUpfront}
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#aaa' }} className="no-print">(enter before printing)</span>
-                </div>
-                <div>● <strong>Upfront Fee Payable to:</strong> {t.price != null && t.price > 100 ? riskBuyerInfo?.legal ?? riskBuyerCode : riskSellerInfo?.legal ?? riskSellerCode}</div>
+              {/* ── Footer ───────────────────────────────────────────────────── */}
+              <div style={{ fontSize: '11.5px', color: '#555', lineHeight: '1.7', marginBottom: '24px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
+                This document confirms the terms agreed between <strong>{protBuyerInfo?.legal ?? protBuyerCode}</strong> (Protection Buyer) and <strong>{protSellerInfo?.legal ?? protSellerCode}</strong> (Protection Seller) for the {index} trade executed on <strong>{tradeDate}</strong>. Effective date is T+0. Settlement date is T+3 business days (<strong>{settlDate}</strong>). All terms are subject to the ISDA Master Agreement and related Schedule executed between the parties.
               </div>
 
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Trade Type:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● Credit Default Swap (CDS)</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Effective Date:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {tradeDate}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Maturity Date:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {maturity}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Reference Obligation:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● {index}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ color: '#2255aa', fontSize: '13px', marginBottom: '10px' }}>Facilitation Fee:</div>
-              <div style={{ marginLeft: '16px', marginBottom: '16px' }}>● Charged by Crosspoint Capital: {facFee}</div>
-
-              <hr style={{ borderColor: '#ccc', marginBottom: '16px' }} />
-
-              <div style={{ fontSize: '12px', color: '#444', marginBottom: '24px' }}>
-                This document serves as an official confirmation of the terms agreed upon between <strong>{riskBuyerInfo?.legal ?? riskBuyerCode}</strong> (as the Buyer of Risk) and <strong>{riskSellerInfo?.legal ?? riskSellerCode}</strong> (as the Seller of Risk) for the {index} tranche trade executed on <strong>{tradeDate}</strong>. All terms are subject to the provisions of the ISDA Master Agreement and related confirmations executed between the parties.
-              </div>
-
-              {/* Buttons */}
-              <div className="no-print" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              {/* ── Buttons ──────────────────────────────────────────────────── */}
+              <div className="no-print" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button
-                  onClick={() => window.print()}
-                  style={{ background: '#2255aa', color: '#fff', border: 'none', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', letterSpacing: '1px' }}
+                  onClick={downloadPdf}
+                  style={{ background: '#2255aa', color: '#fff', border: 'none', padding: '8px 28px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', letterSpacing: '1px', borderRadius: '2px' }}
                 >
-                  PRINT / SAVE PDF
+                  ↓ DOWNLOAD PDF
                 </button>
                 <button
                   onClick={() => setConfirmTrade(null)}
-                  style={{ background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif' }}
+                  style={{ background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'Georgia, serif', borderRadius: '2px' }}
                 >
                   CLOSE
                 </button>
               </div>
+
             </div>
           </div>
         )
