@@ -1074,14 +1074,14 @@ export default function BackendPage() {
 
         {!confirmClear ? (
           <button onClick={() => setConfirmClear(true)}
-            style={{ background: 'transparent', color: '#3a3a3a', border: '1px solid #222', padding: '2px 7px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', alignSelf: 'center' }}>
-            CLR
+            style={{ background: '#1a0000', color: '#cc4444', border: '1px solid #662222', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', letterSpacing: '1px' }}>
+            CLEAR ALL
           </button>
         ) : (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '3px', alignSelf: 'center' }}>
-            <span style={{ color: '#ff4444', fontSize: '10px' }}>clear?</span>
-            <button onClick={clearAllPrices} style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700 }}>YES</button>
-            <button onClick={() => setConfirmClear(false)} style={{ background: '#111', color: '#555', border: '1px solid #222', padding: '2px 6px', fontSize: '10px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer' }}>NO</button>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', alignSelf: 'center' }}>
+            <span style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700 }}>CLEAR ALL PRICES?</span>
+            <button onClick={clearAllPrices} style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700 }}>YES</button>
+            <button onClick={() => setConfirmClear(false)} style={{ background: '#111', color: '#555', border: '1px solid #333', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer' }}>NO</button>
           </span>
         )}
       </div>
