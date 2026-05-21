@@ -84,6 +84,7 @@ export default function MarketPage() {
   const [hiddenCols, setHiddenCols] = useState<Set<ColKey>>(new Set())
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME)
   const [showSettings, setShowSettings] = useState(false)
+  const [rtOk, setRtOk] = useState(true)
   const flashTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // ── Load theme + schedule EOD redirect ───────────────────────────────────
@@ -115,6 +116,15 @@ export default function MarketPage() {
   useEffect(() => {
     let cancelled = false
 
+    // Fetch only prices (called on poll + visibility refresh, no need to re-fetch config)
+    async function refreshPrices() {
+      const { data: pd } = await supabase.from('prices').select('*')
+      if (cancelled || !pd) return
+      const map: Record<string, Price> = {}
+      for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
+      setPrices(map)
+    }
+
     const ch = supabase
       .channel(`market-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prices' }, (payload) => {
@@ -136,7 +146,11 @@ export default function MarketPage() {
         const key = `${t.series_number}:${t.tranche_name}`
         flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
       })
-      .subscribe()
+      .subscribe((status) => {
+        setRtOk(status === 'SUBSCRIBED')
+        // If connection dropped and just recovered, do a full price refresh to catch any missed updates
+        if (status === 'SUBSCRIBED') refreshPrices()
+      })
 
     async function loadData() {
       const [{ data: sd }, { data: td }, { data: pd }] = await Promise.all([
@@ -154,9 +168,20 @@ export default function MarketPage() {
       }
     }
 
+    // ── Polling fallback: re-fetch prices every 30s even if realtime is healthy ──
+    const pollInterval = setInterval(refreshPrices, 30_000)
+
+    // ── Visibility refresh: catch up whenever the user returns to the tab ──────
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') refreshPrices()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     loadData()
     return () => {
       cancelled = true
+      clearInterval(pollInterval)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       supabase.removeChannel(ch)
       // Clear any active flash timers on unmount
       Object.values(flashTimers.current).forEach(clearTimeout)
@@ -185,9 +210,16 @@ export default function MarketPage() {
       {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
         <span style={{ color: theme.accent, fontSize: '14px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX MARKET — CROSSPOINT CAPITAL
+        </span>
+        <span
+          title={rtOk ? 'Realtime connected' : 'Realtime disconnected — polling fallback active'}
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: rtOk ? '#44cc44' : '#ff5555', opacity: 0.85, cursor: 'default' }}
+        >
+          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: rtOk ? '#44cc44' : '#ff5555', boxShadow: rtOk ? '0 0 4px #44cc44' : '0 0 4px #ff5555' }} />
+          {rtOk ? 'LIVE' : 'POLLING'}
         </span>
       </div>
 

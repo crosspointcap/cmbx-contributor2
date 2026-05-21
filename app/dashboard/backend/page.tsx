@@ -318,6 +318,7 @@ export default function BackendPage() {
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
   const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
   const [showSettings, setShowSettings] = useState(false)
+  const [rtOk,         setRtOk]         = useState(true)
   const [cdxLiveHy,    setCdxLiveHy]    = useState<number | null>(null)
   const [autoAdjMsg,   setAutoAdjMsg]   = useState<string>('')
   const [pulledPrices, setPulledPrices] = useState<Record<string, Array<{
@@ -423,7 +424,11 @@ export default function BackendPage() {
           applyMsAdjustments(hy)
         }
       })
-      .subscribe()
+      .subscribe((status) => {
+        setRtOk(status === 'SUBSCRIBED')
+        // On reconnect, immediately re-fetch prices to fill any gap missed while disconnected
+        if (status === 'SUBSCRIBED') refreshPrices()
+      })
 
     async function fetchSpx() {
       try {
@@ -455,6 +460,14 @@ export default function BackendPage() {
       } catch (e) {
         console.warn('[cdx-backfill] failed:', e)
       }
+    }
+
+    // Fetch only prices — used for polling + visibility refresh
+    async function refreshPrices() {
+      const { data: pd } = await supabase.from('prices').select('*')
+      if (cancelled || !pd) return
+      setPrices(Object.fromEntries(pd.map((p: Price) => [`${p.series_number}:${p.tranche_name}`, p])))
+      setGhostPrices(buildGhostMap(pd))
     }
 
     async function loadData() {
@@ -490,12 +503,23 @@ export default function BackendPage() {
     const cdxInterval      = setInterval(fetchCdx,    5 * 60 * 1000)
     const backfillInterval = setInterval(backfillCdx, 5 * 60 * 1000)
 
+    // ── Polling fallback: re-fetch prices every 30s even if realtime is healthy ──
+    const pollInterval = setInterval(refreshPrices, 30_000)
+
+    // ── Visibility refresh: catch up on missed updates when tab becomes active ──
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') refreshPrices()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     loadData()
     return () => {
       cancelled = true
       clearInterval(spxInterval)
       clearInterval(cdxInterval)
       clearInterval(backfillInterval)
+      clearInterval(pollInterval)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       supabase.removeChannel(ch)
       // Clear all pending timers on unmount
       Object.values(flashTimers.current).forEach(clearTimeout)
@@ -959,6 +983,13 @@ export default function BackendPage() {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: agentOnline ? '#66ff88' : '#444', display: 'inline-block', flexShrink: 0 }} />
             <span style={{ color: '#555', fontSize: '13px' }}>AGENT</span>
+          </span>
+          <span
+            title={rtOk ? 'Realtime connected' : 'Realtime disconnected — polling fallback active'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'default' }}
+          >
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: rtOk ? '#44cc44' : '#ff5555', display: 'inline-block', flexShrink: 0, boxShadow: rtOk ? '0 0 4px #44cc44' : '0 0 4px #ff5555' }} />
+            <span style={{ color: '#555', fontSize: '13px' }}>{rtOk ? 'RT' : 'POLL'}</span>
           </span>
           <a href="/dashboard/market" style={{ color: '#555', fontSize: '15px', border: '1px solid #2a2a2a', padding: '2px 8px', textDecoration: 'none', borderRadius: '2px' }}>
             MARKET
