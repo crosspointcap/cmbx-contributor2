@@ -317,10 +317,36 @@ export default function HistoryPage() {
       {showSettings && <ThemePanel theme={theme} onSave={handleSaveTheme} onClose={() => setShowSettings(false)} />}
 
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: `1px solid ${theme.fg}22`, flexShrink: 0 }}>
         <span style={{ color: theme.accent, fontSize: '15px', letterSpacing: '2px', fontWeight: 700 }}>
           CMBX HISTORY — CROSSPOINT
         </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {myDealerCode && (
+            <span style={{ fontSize: '11px', color: theme.fg, opacity: 0.5, letterSpacing: '1px' }}>
+              {myDealerCode}
+            </span>
+          )}
+          <button
+            onClick={() => { clearSession(); window.location.href = '/login' }}
+            style={{
+              background: 'transparent',
+              color: theme.fg,
+              border: `1px solid ${theme.fg}33`,
+              fontFamily: 'Courier New, monospace',
+              fontSize: '10px',
+              letterSpacing: '1px',
+              padding: '3px 10px',
+              cursor: 'pointer',
+              borderRadius: '2px',
+              opacity: 0.5,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = theme.fg + '88' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.borderColor = theme.fg + '33' }}
+          >
+            SIGN OUT
+          </button>
+        </div>
       </div>
 
       {/* Nav tabs */}
