@@ -9,23 +9,41 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-/** Derive ViewAs from Supabase user metadata. Falls back to email prefix. */
-function resolveViewAs(user: { email?: string; user_metadata?: Record<string, unknown> }): ViewAs | null {
-  const meta = user.user_metadata ?? {}
+// Explicit email → ViewAs mapping for all known accounts
+const EMAIL_ROLE_MAP: Record<string, ViewAs> = {
+  'ms@cpc-market.com':               'MS',
+  'boa@cpc-market.com':              'BOA',
+  'citi@cpc-market.com':             'CITI',
+  'jpmorgan@cpc-market.com':         'JPM',
+  'gs@cpc-market.com':               'GS',
+  'ubs@cpc-market.com':              'UBS',
+  'bnp@cpc-market.com':              'BNP',
+  'db@cpc-market.com':               'DB',
+  'barc@cpc-market.com':             'BARC',
+  'admin@crosspoint-capital.com':    'MARKET',
+}
 
-  // Check common metadata fields: role, dealer, viewAs, firm
+/** Derive ViewAs from the known email map, then user_metadata, then email prefix. */
+function resolveViewAs(user: { email?: string; user_metadata?: Record<string, unknown> }): ViewAs | null {
+  // 1. Explicit email table (most reliable)
+  if (user.email) {
+    const mapped = EMAIL_ROLE_MAP[user.email.toLowerCase().trim()]
+    if (mapped) return mapped
+  }
+
+  // 2. user_metadata fields: role, dealer, viewAs, firm
+  const meta = user.user_metadata ?? {}
   for (const field of ['role', 'dealer', 'viewAs', 'firm']) {
     const val = (meta[field] as string | undefined)?.toUpperCase()
     if (val && (VIEW_AS_OPTIONS as readonly string[]).includes(val)) return val as ViewAs
-    // ADMIN is an alias for MARKET
     if (val === 'ADMIN') return 'MARKET'
   }
 
-  // Fall back to email prefix (e.g. ms@crosspoint.com → MS)
+  // 3. Email prefix fallback (e.g. ms@example.com → MS)
   if (user.email) {
     const prefix = user.email.split('@')[0].toUpperCase()
     if ((VIEW_AS_OPTIONS as readonly string[]).includes(prefix)) return prefix as ViewAs
-    if (prefix === 'ADMIN' || prefix === 'MARKET') return 'MARKET'
+    if (prefix === 'ADMIN') return 'MARKET'
   }
 
   return null
