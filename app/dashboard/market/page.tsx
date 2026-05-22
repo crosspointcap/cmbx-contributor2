@@ -328,10 +328,6 @@ export default function MarketPage() {
               {series.map(s => {
                 const visibleTranches = tranches.filter(t => {
                   const p = prices[`${s.series_number}:${t.tranche_name}`]
-                  if (myDealerCode) {
-                    // Dealers only see rows where they have at least one price posted
-                    return p?.bid_dealer === myDealerCode || p?.ask_dealer === myDealerCode
-                  }
                   return p?.bid != null || p?.ask != null || p?.last_trade_px != null
                 })
                 if (visibleTranches.length === 0) return null
@@ -365,12 +361,9 @@ export default function MarketPage() {
                       if (flash === 'red')   rowBg = light ? '#ffdddd' : '#3a0000'
                       if (flash === 'green') rowBg = light ? '#ddffdd' : '#003a00'
 
-                      // Dealers only see their own side's prices; MARKET sees everything
-                      const ownBid = !myDealerCode || price?.bid_dealer === myDealerCode
-                      const ownAsk = !myDealerCode || price?.ask_dealer === myDealerCode
-
-                      const bidColor = priceColor(price?.bid_dealer ?? null, myDealerCode, ownBid && price?.bid != null, theme.fg)
-                      const askColor = priceColor(price?.ask_dealer ?? null, myDealerCode, ownAsk && price?.ask != null, theme.fg)
+                      // Dealers see all prices but their own are highlighted; attribution (dealer name) is never shown
+                      const bidColor = priceColor(price?.bid_dealer ?? null, myDealerCode, price?.bid != null, theme.fg)
+                      const askColor = priceColor(price?.ask_dealer ?? null, myDealerCode, price?.ask != null, theme.fg)
 
                       return (
                         <tr
@@ -382,22 +375,22 @@ export default function MarketPage() {
                           </td>
                           {!hiddenCols.has('bid') && (
                             <td style={{ textAlign: 'right', padding: '5px 10px', color: bidColor, fontWeight: 700 }}>
-                              {ownBid && price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: emptyClr }}>—</span>}
+                              {price?.bid != null ? formatPx(price.bid, price.mode) : <span style={{ color: emptyClr }}>—</span>}
                             </td>
                           )}
                           {!hiddenCols.has('ask') && (
                             <td style={{ textAlign: 'right', padding: '5px 10px', color: askColor, fontWeight: 700 }}>
-                              {ownAsk && price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: emptyClr }}>—</span>}
+                              {price?.ask != null ? formatPx(price.ask, price.mode) : <span style={{ color: emptyClr }}>—</span>}
                             </td>
                           )}
                           {!hiddenCols.has('bsz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: ownBid && price?.bid_size != null ? sizeClr : emptyClr, fontSize: '12px', opacity: 0.55 }}>
-                              {ownBid && price?.bid_size != null ? String(price.bid_size) : '—'}
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.bid_size != null ? sizeClr : emptyClr, fontSize: '12px', opacity: 0.55 }}>
+                              {price?.bid_size != null ? String(price.bid_size) : '—'}
                             </td>
                           )}
                           {!hiddenCols.has('asz') && (
-                            <td style={{ textAlign: 'right', padding: '5px 8px', color: ownAsk && price?.ask_size != null ? sizeClr : emptyClr, fontSize: '12px', opacity: 0.55 }}>
-                              {ownAsk && price?.ask_size != null ? String(price.ask_size) : '—'}
+                            <td style={{ textAlign: 'right', padding: '5px 8px', color: price?.ask_size != null ? sizeClr : emptyClr, fontSize: '12px', opacity: 0.55 }}>
+                              {price?.ask_size != null ? String(price.ask_size) : '—'}
                             </td>
                           )}
                           {!hiddenCols.has('lastpx') && (
