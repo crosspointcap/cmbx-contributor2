@@ -338,7 +338,8 @@ export default function BackendPage() {
 
   const selectedDealerRef   = useRef(selectedDealer)
   const selectedRowRef      = useRef(selectedRow)
-  const blotterBroadcastRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const blotterBroadcastRef   = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const priceRefreshRef       = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const latestSpxRef        = useRef<number | null>(null)
   const latestCdxRef        = useRef<{ hy: number | null; ig: number | null }>({ hy: null, ig: null })
   // MS delta-hedge snapshots: keyed by "series:tranche"
@@ -371,13 +372,21 @@ export default function BackendPage() {
     return () => clearInterval(id)
   }, [])
 
-  // Persistent broadcast channel — wait for SUBSCRIBED before storing ref
+  // Persistent broadcast channels — wait for SUBSCRIBED before storing ref
   useEffect(() => {
     const ch = supabase.channel('trade-blotter-sync')
     ch.subscribe((status) => {
       if (status === 'SUBSCRIBED') blotterBroadcastRef.current = ch
     })
     return () => { blotterBroadcastRef.current = null; supabase.removeChannel(ch) }
+  }, [])
+
+  useEffect(() => {
+    const ch = supabase.channel('price-refresh')
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') priceRefreshRef.current = ch
+    })
+    return () => { priceRefreshRef.current = null; supabase.removeChannel(ch) }
   }, [])
 
   useEffect(() => {
@@ -620,6 +629,9 @@ export default function BackendPage() {
 
     await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
 
+    // Push refresh signal to all dealer market pages
+    priceRefreshRef.current?.send({ type: 'broadcast', event: 'price-saved', payload: {} })
+
     // MS delta-hedge snapshot — record CDX HY at the moment of price entry
     if (dealer === 'MS' && (field === 'bid' || field === 'ask') && latestCdxRef.current.hy != null) {
       if (numericValue == null) {
@@ -806,6 +818,9 @@ export default function BackendPage() {
           }
         }
       }
+
+      // Push refresh signal to all dealer market pages after bulk submit
+      priceRefreshRef.current?.send({ type: 'broadcast', event: 'price-saved', payload: {} })
 
       setShowBulkInput(false)
       setBulkText('')
