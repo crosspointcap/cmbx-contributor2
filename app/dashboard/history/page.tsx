@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime, fmtShortDate, isLight } from '../../../lib/utils'
-import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme, loadViewAs } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
 import { scheduleEodLogout } from '../../../lib/eod-logout'
 
@@ -98,9 +98,13 @@ export default function HistoryPage() {
 
   const usingCustomRange = !!(customFrom && customTo)
 
-  // ── Load theme + schedule EOD redirect ───────────────────────────────────
+  // ── Load theme + VIEW AS + schedule EOD redirect ─────────────────────────
   useEffect(() => {
-    setIsTrader(true)
+    const va = loadViewAs()
+    // MARKET = Crosspoint admin: sees all dealer names, delete buttons, ADMIN tab
+    // dealer code = dealer view: redacted counterparties, no delete buttons
+    setIsTrader(va === 'MARKET')
+    setMyDealerCode(va === 'MARKET' ? null : va)
     setTheme(loadTheme())
     const cancelEod = scheduleEodLogout(() => { window.location.href = '/dashboard/backend' })
     return () => cancelEod()
