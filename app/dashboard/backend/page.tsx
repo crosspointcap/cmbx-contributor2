@@ -1098,7 +1098,6 @@ export default function BackendPage() {
               <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: `2px solid ${theme.ask}`, minWidth: '100px', fontWeight: 700 }}>OFFER</th>
               <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
               <th style={{ textAlign: 'right',  padding: '3px 10px', borderBottom: '1px solid #1e1e1e', minWidth: '120px', fontWeight: 700 }}>LST TRADE PX</th>
-              <th style={{ textAlign: 'right',  padding: '3px 12px 3px 8px', borderBottom: '1px solid #1e1e1e', minWidth: '50px', fontWeight: 700 }}>CHG</th>
             </tr>
           </thead>
           <tbody>
@@ -1112,7 +1111,7 @@ export default function BackendPage() {
               <Fragment key={s.series_number}>
                 <tr onClick={() => toggleCollapse(s.series_number)} style={{ cursor: 'pointer' }}>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     style={{
                       padding: '8px 12px 5px 10px',
                       color: theme.accent,
@@ -1216,7 +1215,6 @@ export default function BackendPage() {
                           </div>
                         ) : <span style={{ color: '#2a2a2a' }}>—</span>}
                       </td>
-                      <td style={{ textAlign: 'right', padding: '3px 12px 3px 8px', color: '#2a2a2a' }}>—</td>
                     </tr>
                   )
                 })}
@@ -1480,6 +1478,7 @@ export default function BackendPage() {
           if (!el) return
           const clone = el.cloneNode(true) as HTMLElement
           clone.querySelectorAll('.no-print').forEach(n => n.remove())
+          clone.querySelectorAll<HTMLElement>('.print-only').forEach(n => { n.style.display = '' })
 
           const css = `
             * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1603,7 +1602,7 @@ export default function BackendPage() {
                         placeholder="enter implied spread..."
                         style={{ border: '1px solid #bbb', padding: '2px 8px', fontSize: '12.5px', fontFamily: 'Georgia, serif', width: '200px', color: '#222', borderRadius: '2px' }}
                       />
-                      <span className="print-only" style={{ fontSize: '12.5px', fontWeight: 500 }}>{confirmSpread}</span>
+                      <span className="print-only" style={{ display: 'none', fontSize: '12.5px', fontWeight: 500 }}>{confirmSpread}</span>
                     </td>
                   </tr>
                 </tbody>
