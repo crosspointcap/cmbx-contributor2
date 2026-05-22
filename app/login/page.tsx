@@ -1,28 +1,29 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { saveViewAs, hasValidSession, loadViewAs, VIEW_AS_OPTIONS, ViewAs } from '../../lib/theme'
 
-const DEALERS: ViewAs[] = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
+// Accept 'ADMIN' as alias for MARKET, plus all standard dealer codes
+const VALID_CODES = ['ADMIN', ...VIEW_AS_OPTIONS] as const
 
-const DEALER_COLORS: Record<string, { bg: string; border: string; color: string }> = {
-  MS:   { bg: '#3a0a0a', border: '#cc3333', color: '#ff9999' },
-  BOA:  { bg: '#0a2a0a', border: '#228822', color: '#88ee88' },
-  CITI: { bg: '#1a0a2a', border: '#882299', color: '#cc88ff' },
-  JPM:  { bg: '#0a1a3a', border: '#1155bb', color: '#5599ff' },
-  GS:   { bg: '#1a1a00', border: '#887700', color: '#ffcc44' },
-  UBS:  { bg: '#2a0a1a', border: '#992255', color: '#ff88cc' },
-  BNP:  { bg: '#0a0a2a', border: '#333399', color: '#8888ff' },
-  DB:   { bg: '#0a1a22', border: '#116688', color: '#44bbdd' },
-  BARC: { bg: '#1a0f00', border: '#884400', color: '#ffaa66' },
+function resolveCode(raw: string): ViewAs | null {
+  const upper = raw.trim().toUpperCase()
+  if (upper === 'ADMIN') return 'MARKET'
+  if ((VIEW_AS_OPTIONS as readonly string[]).includes(upper)) return upper as ViewAs
+  return null
 }
 
-function select(viewAs: ViewAs) {
-  saveViewAs(viewAs)
-  window.location.href = viewAs === 'MARKET' ? '/dashboard/backend' : '/dashboard/market'
+function checkPassword(input: string): boolean {
+  const expected = process.env.NEXT_PUBLIC_CMBX_PASSWORD ?? 'cmbx2026'
+  return input === expected
 }
 
 export default function LoginPage() {
+  const [firmCode, setFirmCode]   = useState('')
+  const [password, setPassword]   = useState('')
+  const [error,    setError]      = useState('')
+  const [loading,  setLoading]    = useState(false)
+
   // If already have a valid session today, skip the selector
   useEffect(() => {
     if (hasValidSession()) {
@@ -30,6 +31,41 @@ export default function LoginPage() {
       window.location.replace(va === 'MARKET' ? '/dashboard/backend' : '/dashboard/market')
     }
   }, [])
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    const code = resolveCode(firmCode)
+    if (!code) {
+      setError('Unknown firm code. Use ADMIN or a dealer code (MS, BOA, JPM…)')
+      setLoading(false)
+      return
+    }
+    if (!checkPassword(password)) {
+      setError('Incorrect password.')
+      setLoading(false)
+      return
+    }
+
+    saveViewAs(code)
+    window.location.href = code === 'MARKET' ? '/dashboard/backend' : '/dashboard/market'
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '10px 12px',
+    background: '#111111',
+    color: '#cccccc',
+    border: '1px solid #2a2a2a',
+    fontFamily: 'Courier New, monospace',
+    fontSize: '14px',
+    letterSpacing: '1px',
+    outline: 'none',
+    borderRadius: '2px',
+    boxSizing: 'border-box',
+  }
 
   return (
     <div style={{
@@ -40,7 +76,7 @@ export default function LoginPage() {
       justifyContent: 'center',
       fontFamily: 'Courier New, monospace',
     }}>
-      <div style={{ width: '480px' }}>
+      <div style={{ width: '360px' }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
@@ -52,73 +88,76 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Prompt */}
-        <div style={{ fontSize: '11px', color: '#555', letterSpacing: '2px', marginBottom: '16px', textAlign: 'center' }}>
-          SELECT YOUR FIRM TO CONTINUE
-        </div>
+        {/* Sign-in form */}
+        <form onSubmit={handleSubmit} autoComplete="off">
 
-        {/* Admin button */}
-        <button
-          onClick={() => select('MARKET')}
-          style={{
-            width: '100%',
-            padding: '12px',
-            marginBottom: '24px',
-            background: '#1a1200',
-            color: '#f0c040',
-            border: '1px solid #f0c040',
-            fontFamily: 'Courier New, monospace',
-            fontSize: '14px',
-            fontWeight: 700,
-            letterSpacing: '2px',
-            cursor: 'pointer',
-            borderRadius: '2px',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#2a2000' }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#1a1200' }}
-        >
-          CROSSPOINT CAPITAL — ADMIN
-        </button>
+          {/* Firm Code */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '10px', color: '#555', letterSpacing: '2px', marginBottom: '6px' }}>
+              FIRM CODE
+            </label>
+            <input
+              type="text"
+              value={firmCode}
+              onChange={e => { setFirmCode(e.target.value); setError('') }}
+              placeholder="e.g. ADMIN · MS · BOA · JPM"
+              autoFocus
+              style={inputStyle}
+              onFocus={e => { e.currentTarget.style.borderColor = '#f0c040' }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#2a2a2a' }}
+            />
+          </div>
 
-        {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ flex: 1, height: '1px', background: '#1e1e1e' }} />
-          <span style={{ fontSize: '10px', color: '#333', letterSpacing: '2px' }}>DEALER</span>
-          <div style={{ flex: 1, height: '1px', background: '#1e1e1e' }} />
-        </div>
+          {/* Password */}
+          <div style={{ marginBottom: '22px' }}>
+            <label style={{ display: 'block', fontSize: '10px', color: '#555', letterSpacing: '2px', marginBottom: '6px' }}>
+              PASSWORD
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError('') }}
+              placeholder="——————"
+              style={inputStyle}
+              onFocus={e => { e.currentTarget.style.borderColor = '#f0c040' }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#2a2a2a' }}
+            />
+          </div>
 
-        {/* Dealer grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-          {DEALERS.map(code => {
-            const c = DEALER_COLORS[code]
-            return (
-              <button
-                key={code}
-                onClick={() => select(code)}
-                style={{
-                  padding: '14px 10px',
-                  background: c.bg,
-                  color: c.color,
-                  border: `1px solid ${c.border}`,
-                  fontFamily: 'Courier New, monospace',
-                  fontSize: '15px',
-                  fontWeight: 700,
-                  letterSpacing: '1px',
-                  cursor: 'pointer',
-                  borderRadius: '2px',
-                  transition: 'filter 0.1s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.3)' }}
-                onMouseLeave={e => { e.currentTarget.style.filter = '' }}
-              >
-                {code}
-              </button>
-            )
-          })}
-        </div>
+          {/* Error */}
+          {error && (
+            <div style={{ marginBottom: '14px', fontSize: '11px', color: '#ff6666', letterSpacing: '1px' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading || !firmCode || !password}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: loading || !firmCode || !password ? '#111' : '#1a1200',
+              color: loading || !firmCode || !password ? '#444' : '#f0c040',
+              border: `1px solid ${loading || !firmCode || !password ? '#222' : '#f0c040'}`,
+              fontFamily: 'Courier New, monospace',
+              fontSize: '14px',
+              fontWeight: 700,
+              letterSpacing: '3px',
+              cursor: loading || !firmCode || !password ? 'default' : 'pointer',
+              borderRadius: '2px',
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => { if (!loading && firmCode && password) e.currentTarget.style.background = '#2a2000' }}
+            onMouseLeave={e => { if (!loading && firmCode && password) e.currentTarget.style.background = '#1a1200' }}
+          >
+            {loading ? 'SIGNING IN…' : 'SIGN IN'}
+          </button>
+        </form>
 
         <div style={{ textAlign: 'center', marginTop: '32px', fontSize: '10px', color: '#2a2a2a', letterSpacing: '1px' }}>
-          INTERNAL USE ONLY · SESSION EXPIRES 6PM ET
+          INTERNAL USE ONLY · SESSION EXPIRES AT MIDNIGHT ET
         </div>
 
       </div>

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime, isLight } from '../../../lib/utils'
-import { Theme, DEFAULT_THEME, loadTheme, saveTheme, loadViewAs, saveViewAs, hasValidSession, clearSession, VIEW_AS_OPTIONS, ViewAs } from '../../../lib/theme'
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme, loadViewAs, hasValidSession, clearSession, ViewAs } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
 import { scheduleEodLogout } from '../../../lib/eod-logout'
 
@@ -223,29 +223,12 @@ export default function MarketPage() {
           CMBX MARKET — CROSSPOINT CAPITAL
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {/* VIEW AS */}
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '10px', letterSpacing: '1px', color: theme.fg, opacity: 0.4 }}>VIEW AS</span>
-            <select
-              value={viewAs}
-              onChange={e => { const v = e.target.value as ViewAs; setViewAs(v); saveViewAs(v) }}
-              style={{
-                background: theme.bg,
-                color: viewAs === 'MARKET' ? theme.accent : theme.fg,
-                border: `1px solid ${theme.fg}33`,
-                fontFamily: 'Courier New, monospace',
-                fontSize: '12px',
-                padding: '2px 6px',
-                cursor: 'pointer',
-                outline: 'none',
-                fontWeight: viewAs === 'MARKET' ? 700 : 400,
-              }}
-            >
-              {VIEW_AS_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </span>
+          {/* Signed-in identity */}
+          {viewAs !== 'MARKET' && (
+            <span style={{ fontSize: '11px', color: theme.fg, opacity: 0.5, letterSpacing: '1px' }}>
+              {viewAs}
+            </span>
+          )}
           {/* RT status */}
           <span
             title={rtOk ? 'Realtime connected' : 'Realtime disconnected — polling fallback active'}
@@ -254,6 +237,26 @@ export default function MarketPage() {
             <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: rtOk ? '#44cc44' : '#ff5555', boxShadow: rtOk ? '0 0 4px #44cc44' : '0 0 4px #ff5555' }} />
             {rtOk ? 'LIVE' : 'POLLING'}
           </span>
+          {/* Sign out */}
+          <button
+            onClick={() => { clearSession(); window.location.href = '/login' }}
+            style={{
+              background: 'transparent',
+              color: theme.fg,
+              border: `1px solid ${theme.fg}33`,
+              fontFamily: 'Courier New, monospace',
+              fontSize: '10px',
+              letterSpacing: '1px',
+              padding: '3px 10px',
+              cursor: 'pointer',
+              borderRadius: '2px',
+              opacity: 0.5,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = theme.fg + '88' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.borderColor = theme.fg + '33' }}
+          >
+            SIGN OUT
+          </button>
         </div>
       </div>
 
