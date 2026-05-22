@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import * as XLSX from 'xlsx'
 import { fmt32nds, formatPx, fmtTime, parse32nds, buildGhostMap, mergeGhost, GhostMap } from '../../../lib/utils'
-import { Theme, DEFAULT_THEME, loadTheme, saveTheme } from '../../../lib/theme'
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme, loadViewAs } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
 import { scheduleEodLogout } from '../../../lib/eod-logout'
 
@@ -346,8 +346,14 @@ export default function BackendPage() {
   selectedDealerRef.current = selectedDealer
   selectedRowRef.current    = selectedRow
 
-  // Load theme + schedule EOD redirect
+  // Access gate + theme load
   useEffect(() => {
+    // Dealers (VIEW AS = dealer code) are never allowed to see the admin page.
+    // Redirect immediately before any data loads or UI renders.
+    if (loadViewAs() !== 'MARKET') {
+      window.location.replace('/dashboard/market')
+      return
+    }
     setTheme(loadTheme())
     setAuthChecked(true)
     const cancelEod = scheduleEodLogout(() => { window.location.href = '/dashboard/backend' })
