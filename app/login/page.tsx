@@ -75,7 +75,7 @@ export default function LoginPage() {
 
       saveViewAs(viewAs)
       window.location.href = viewAs === 'MARKET' ? '/dashboard/backend' : '/dashboard/market'
-    } catch (err) {
+    } catch {
       setError('Unexpected error. Please try again.')
       setLoading(false)
     }
@@ -121,7 +121,7 @@ export default function LoginPage() {
         {/* Sign-in form */}
         <form onSubmit={handleSubmit} autoComplete="off">
 
-          {/* Email */}
+          {/* Email / Username */}
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '10px', color: '#555', letterSpacing: '2px', marginBottom: '6px' }}>
               USERNAME
