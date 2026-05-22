@@ -1,30 +1,42 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import { saveViewAs, hasValidSession, loadViewAs, VIEW_AS_OPTIONS, ViewAs } from '../../lib/theme'
 
-// Accept 'ADMIN' as alias for MARKET, plus all standard dealer codes
-const VALID_CODES = ['ADMIN', ...VIEW_AS_OPTIONS] as const
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-function resolveCode(raw: string): ViewAs | null {
-  const upper = raw.trim().toUpperCase()
-  if (upper === 'ADMIN') return 'MARKET'
-  if ((VIEW_AS_OPTIONS as readonly string[]).includes(upper)) return upper as ViewAs
+/** Derive ViewAs from Supabase user metadata. Falls back to email prefix. */
+function resolveViewAs(user: { email?: string; user_metadata?: Record<string, unknown> }): ViewAs | null {
+  const meta = user.user_metadata ?? {}
+
+  // Check common metadata fields: role, dealer, viewAs, firm
+  for (const field of ['role', 'dealer', 'viewAs', 'firm']) {
+    const val = (meta[field] as string | undefined)?.toUpperCase()
+    if (val && (VIEW_AS_OPTIONS as readonly string[]).includes(val)) return val as ViewAs
+    if (val === 'ADMIN') return 'MARKET'
+  }
+
+  // Fall back to email prefix (e.g. ms@crosspoint.com → MS)
+  if (user.email) {
+    const prefix = user.email.split('@')[0].toUpperCase()
+    if ((VIEW_AS_OPTIONS as readonly string[]).includes(prefix)) return prefix as ViewAs
+    if (prefix === 'ADMIN' || prefix === 'MARKET') return 'MARKET'
+  }
+
   return null
 }
 
-function checkPassword(input: string): boolean {
-  const expected = process.env.NEXT_PUBLIC_CMBX_PASSWORD ?? 'cmbx2026'
-  return input === expected
-}
-
 export default function LoginPage() {
-  const [firmCode, setFirmCode]   = useState('')
-  const [password, setPassword]   = useState('')
-  const [error,    setError]      = useState('')
-  const [loading,  setLoading]    = useState(false)
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
 
-  // If already have a valid session today, skip the selector
+  // If already have a valid session today, skip login
   useEffect(() => {
     if (hasValidSession()) {
       const va = loadViewAs()
@@ -32,25 +44,40 @@ export default function LoginPage() {
     }
   }, [])
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    const code = resolveCode(firmCode)
-    if (!code) {
-      setError('Unknown firm code. Use ADMIN or a dealer code (MS, BOA, JPM…)')
-      setLoading(false)
-      return
-    }
-    if (!checkPassword(password)) {
-      setError('Incorrect password.')
-      setLoading(false)
-      return
-    }
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
 
-    saveViewAs(code)
-    window.location.href = code === 'MARKET' ? '/dashboard/backend' : '/dashboard/market'
+      if (authError || !data.user) {
+        setError(authError?.message ?? 'Sign-in failed. Check your credentials.')
+        setLoading(false)
+        return
+      }
+
+      const viewAs = resolveViewAs({
+        email: data.user.email,
+        user_metadata: data.user.user_metadata as Record<string, unknown>,
+      })
+
+      if (!viewAs) {
+        setError('Your account is not mapped to a firm. Contact Crosspoint admin.')
+        setLoading(false)
+        return
+      }
+
+      saveViewAs(viewAs)
+      window.location.href = viewAs === 'MARKET' ? '/dashboard/backend' : '/dashboard/market'
+    } catch {
+      setError('Unexpected error. Please try again.')
+      setLoading(false)
+    }
   }
 
   const inputStyle: React.CSSProperties = {
@@ -66,6 +93,8 @@ export default function LoginPage() {
     borderRadius: '2px',
     boxSizing: 'border-box',
   }
+
+  const canSubmit = !loading && email.trim().length > 0 && password.length > 0
 
   return (
     <div style={{
@@ -91,17 +120,18 @@ export default function LoginPage() {
         {/* Sign-in form */}
         <form onSubmit={handleSubmit} autoComplete="off">
 
-          {/* Firm Code */}
+          {/* Email / Username */}
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '10px', color: '#555', letterSpacing: '2px', marginBottom: '6px' }}>
-              FIRM CODE
+              USERNAME
             </label>
             <input
               type="text"
-              value={firmCode}
-              onChange={e => { setFirmCode(e.target.value); setError('') }}
-              placeholder="e.g. ADMIN · MS · BOA · JPM"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setError('') }}
+              placeholder="username or email"
               autoFocus
+              autoComplete="username"
               style={inputStyle}
               onFocus={e => { e.currentTarget.style.borderColor = '#f0c040' }}
               onBlur={e => { e.currentTarget.style.borderColor = '#2a2a2a' }}
@@ -118,6 +148,7 @@ export default function LoginPage() {
               value={password}
               onChange={e => { setPassword(e.target.value); setError('') }}
               placeholder="——————"
+              autoComplete="current-password"
               style={inputStyle}
               onFocus={e => { e.currentTarget.style.borderColor = '#f0c040' }}
               onBlur={e => { e.currentTarget.style.borderColor = '#2a2a2a' }}
@@ -134,23 +165,23 @@ export default function LoginPage() {
           {/* Submit */}
           <button
             type="submit"
-            disabled={loading || !firmCode || !password}
+            disabled={!canSubmit}
             style={{
               width: '100%',
               padding: '12px',
-              background: loading || !firmCode || !password ? '#111' : '#1a1200',
-              color: loading || !firmCode || !password ? '#444' : '#f0c040',
-              border: `1px solid ${loading || !firmCode || !password ? '#222' : '#f0c040'}`,
+              background: canSubmit ? '#1a1200' : '#111',
+              color: canSubmit ? '#f0c040' : '#444',
+              border: `1px solid ${canSubmit ? '#f0c040' : '#222'}`,
               fontFamily: 'Courier New, monospace',
               fontSize: '14px',
               fontWeight: 700,
               letterSpacing: '3px',
-              cursor: loading || !firmCode || !password ? 'default' : 'pointer',
+              cursor: canSubmit ? 'pointer' : 'default',
               borderRadius: '2px',
               transition: 'background 0.1s',
             }}
-            onMouseEnter={e => { if (!loading && firmCode && password) e.currentTarget.style.background = '#2a2000' }}
-            onMouseLeave={e => { if (!loading && firmCode && password) e.currentTarget.style.background = '#1a1200' }}
+            onMouseEnter={e => { if (canSubmit) e.currentTarget.style.background = '#2a2000' }}
+            onMouseLeave={e => { if (canSubmit) e.currentTarget.style.background = '#1a1200' }}
           >
             {loading ? 'SIGNING IN…' : 'SIGN IN'}
           </button>
