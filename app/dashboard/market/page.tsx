@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
 import { formatPx, fmtTime, isLight } from '../../../lib/utils'
-import { Theme, DEFAULT_THEME, loadTheme, saveTheme, loadViewAs, saveViewAs, VIEW_AS_OPTIONS, ViewAs } from '../../../lib/theme'
+import { Theme, DEFAULT_THEME, loadTheme, saveTheme, loadViewAs, saveViewAs, hasValidSession, clearSession, VIEW_AS_OPTIONS, ViewAs } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
 import { scheduleEodLogout } from '../../../lib/eod-logout'
 
@@ -90,11 +90,15 @@ export default function MarketPage() {
   // Derived — never stored as state to avoid stale closure issues
   const myDealerCode: string | null = viewAs === 'MARKET' ? null : viewAs
 
-  // ── Load theme + VIEW AS + schedule EOD redirect ──────────────────────────
+  // ── Session check + theme + VIEW AS + EOD ────────────────────────────────
   useEffect(() => {
+    if (!hasValidSession()) {
+      window.location.replace('/login')
+      return
+    }
     setTheme(loadTheme())
     setViewAs(loadViewAs())
-    const cancelEod = scheduleEodLogout(() => { window.location.href = '/dashboard/backend' })
+    const cancelEod = scheduleEodLogout(() => { clearSession(); window.location.href = '/login' })
     return () => cancelEod()
   }, [])
 

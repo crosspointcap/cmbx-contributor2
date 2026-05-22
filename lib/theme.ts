@@ -34,24 +34,51 @@ export function saveTheme(theme: Theme): void {
   } catch {}
 }
 
-// ── VIEW AS — which identity the current browser is viewing as ──────────────
-// 'MARKET' = Crosspoint admin view (sees all dealer names, full blotter, ADMIN tab)
-// dealer code = dealer view (sees own prices highlighted, counterparty names redacted)
+// ── SESSION — daily identity selection, expires at midnight ET ───────────────
+// 'MARKET' = Crosspoint admin (full blotter, ADMIN tab, price entry)
+// dealer code = dealer view (own prices highlighted, counterparty names hidden)
+//
+// Session is stamped with today's date in ET. A session from a prior day is
+// treated as expired — the user is redirected to /login to re-identify.
 
 export const VIEW_AS_OPTIONS = ['MARKET', 'MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC'] as const
 export type ViewAs = typeof VIEW_AS_OPTIONS[number]
-const VIEW_AS_KEY = 'cmbx_view_as'
 
-/** Load VIEW AS selection. Returns 'MARKET' (admin) if nothing saved. */
-export function loadViewAs(): ViewAs {
-  try {
-    const raw = localStorage.getItem(VIEW_AS_KEY) as ViewAs | null
-    if (raw && (VIEW_AS_OPTIONS as readonly string[]).includes(raw)) return raw
-  } catch {}
-  return 'MARKET'
+interface Session { viewAs: ViewAs; date: string }
+const SESSION_KEY = 'cmbx_session'
+
+/** Today's date string (YYYY-MM-DD) in US Eastern time. */
+function todayET(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
 
-/** Persist VIEW AS selection. */
+function readSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const s: Session = JSON.parse(raw)
+    if (s.date !== todayET()) return null
+    if (!(VIEW_AS_OPTIONS as readonly string[]).includes(s.viewAs)) return null
+    return s
+  } catch { return null }
+}
+
+/** True if the browser has a valid session for today. */
+export function hasValidSession(): boolean {
+  return readSession() !== null
+}
+
+/** Load VIEW AS from today's session. Returns 'MARKET' as a safe fallback. */
+export function loadViewAs(): ViewAs {
+  return readSession()?.viewAs ?? 'MARKET'
+}
+
+/** Save VIEW AS and stamp with today's ET date. */
 export function saveViewAs(v: ViewAs): void {
-  try { localStorage.setItem(VIEW_AS_KEY, v) } catch {}
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ viewAs: v, date: todayET() })) } catch {}
+}
+
+/** Clear session (called on EOD logout). */
+export function clearSession(): void {
+  try { localStorage.removeItem(SESSION_KEY) } catch {}
 }

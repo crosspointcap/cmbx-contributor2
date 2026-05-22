@@ -1,29 +1,35 @@
 'use client'
-import { useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useEffect } from 'react'
+import { saveViewAs, hasValidSession, loadViewAs, VIEW_AS_OPTIONS, ViewAs } from '../../lib/theme'
+
+const DEALERS: ViewAs[] = ['MS', 'BOA', 'CITI', 'JPM', 'GS', 'UBS', 'BNP', 'DB', 'BARC']
+
+const DEALER_COLORS: Record<string, { bg: string; border: string; color: string }> = {
+  MS:   { bg: '#3a0a0a', border: '#cc3333', color: '#ff9999' },
+  BOA:  { bg: '#0a2a0a', border: '#228822', color: '#88ee88' },
+  CITI: { bg: '#1a0a2a', border: '#882299', color: '#cc88ff' },
+  JPM:  { bg: '#0a1a3a', border: '#1155bb', color: '#5599ff' },
+  GS:   { bg: '#1a1a00', border: '#887700', color: '#ffcc44' },
+  UBS:  { bg: '#2a0a1a', border: '#992255', color: '#ff88cc' },
+  BNP:  { bg: '#0a0a2a', border: '#333399', color: '#8888ff' },
+  DB:   { bg: '#0a1a22', border: '#116688', color: '#44bbdd' },
+  BARC: { bg: '#1a0f00', border: '#884400', color: '#ffaa66' },
+}
+
+function select(viewAs: ViewAs) {
+  saveViewAs(viewAs)
+  window.location.href = viewAs === 'MARKET' ? '/dashboard/backend' : '/dashboard/market'
+}
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  async function handleLogin() {
-    setLoading(true)
-    setError('')
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
+  // If already have a valid session today, skip the selector
+  useEffect(() => {
+    if (hasValidSession()) {
+      const va = loadViewAs()
+      window.location.replace(va === 'MARKET' ? '/dashboard/backend' : '/dashboard/market')
     }
-    window.location.href = '/dashboard/backend'
-  }
+  }, [])
 
   return (
     <div style={{
@@ -32,134 +38,89 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontFamily: '"IBM Plex Mono", monospace',
+      fontFamily: 'Courier New, monospace',
     }}>
-      <div style={{
-        background: '#111111',
-        border: '1px solid #333333',
-        padding: '40px',
-        width: '400px',
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{
-            color: '#f0c040',
-            fontSize: '24px',
-            fontFamily: '"IBM Plex Mono", monospace',
-            letterSpacing: '4px',
-            fontWeight: 600,
-            marginBottom: '8px',
-          }}>
+      <div style={{ width: '480px' }}>
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 700, color: '#f0c040', letterSpacing: '3px', marginBottom: '6px' }}>
+            CROSSPOINT CAPITAL
+          </div>
+          <div style={{ fontSize: '11px', color: '#444', letterSpacing: '3px' }}>
             CMBX CONTRIBUTOR
           </div>
-          <div style={{
-            color: '#555555',
-            fontSize: '12px',
-            letterSpacing: '2px',
-          }}>
-            — CROSSPOINT CAPITAL
-          </div>
         </div>
 
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{
-            display: 'block',
-            color: '#888888',
-            fontSize: '11px',
-            letterSpacing: '1px',
-            fontFamily: '"IBM Plex Mono", monospace',
-            marginBottom: '6px',
-          }}>
-            EMAIL
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{
-              background: '#1a1a1a',
-              border: '1px solid #333333',
-              color: '#ffffff',
-              padding: '10px',
-              width: '100%',
-              fontFamily: '"IBM Plex Mono", monospace',
-              fontSize: '13px',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
+        {/* Prompt */}
+        <div style={{ fontSize: '11px', color: '#555', letterSpacing: '2px', marginBottom: '16px', textAlign: 'center' }}>
+          SELECT YOUR FIRM TO CONTINUE
         </div>
 
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{
-            display: 'block',
-            color: '#888888',
-            fontSize: '11px',
-            letterSpacing: '1px',
-            fontFamily: '"IBM Plex Mono", monospace',
-            marginBottom: '6px',
-          }}>
-            PASSWORD
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{
-              background: '#1a1a1a',
-              border: '1px solid #333333',
-              color: '#ffffff',
-              padding: '10px',
-              width: '100%',
-              fontFamily: '"IBM Plex Mono", monospace',
-              fontSize: '13px',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
-
-        {error && (
-          <div style={{
-            color: '#ff6666',
-            fontSize: '12px',
-            marginBottom: '16px',
-            fontFamily: '"IBM Plex Mono", monospace',
-          }}>
-            {error}
-          </div>
-        )}
-
+        {/* Admin button */}
         <button
-          onClick={handleLogin}
-          disabled={loading}
+          onClick={() => select('MARKET')}
           style={{
-            background: '#f0c040',
-            color: '#000000',
-            border: 'none',
-            padding: '12px',
             width: '100%',
-            fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: '13px',
-            fontWeight: 500,
+            padding: '12px',
+            marginBottom: '24px',
+            background: '#1a1200',
+            color: '#f0c040',
+            border: '1px solid #f0c040',
+            fontFamily: 'Courier New, monospace',
+            fontSize: '14px',
+            fontWeight: 700,
             letterSpacing: '2px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.7 : 1,
+            cursor: 'pointer',
+            borderRadius: '2px',
           }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#2a2000' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#1a1200' }}
         >
-          {loading ? 'SIGNING IN...' : 'SIGN IN'}
+          CROSSPOINT CAPITAL — ADMIN
         </button>
 
-        <div style={{
-          textAlign: 'center',
-          marginTop: '24px',
-          color: '#333333',
-          fontSize: '11px',
-          fontFamily: '"IBM Plex Mono", monospace',
-        }}>
-          INTERNAL USE ONLY
+        {/* Divider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ flex: 1, height: '1px', background: '#1e1e1e' }} />
+          <span style={{ fontSize: '10px', color: '#333', letterSpacing: '2px' }}>DEALER</span>
+          <div style={{ flex: 1, height: '1px', background: '#1e1e1e' }} />
         </div>
+
+        {/* Dealer grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+          {DEALERS.map(code => {
+            const c = DEALER_COLORS[code]
+            return (
+              <button
+                key={code}
+                onClick={() => select(code)}
+                style={{
+                  padding: '14px 10px',
+                  background: c.bg,
+                  color: c.color,
+                  border: `1px solid ${c.border}`,
+                  fontFamily: 'Courier New, monospace',
+                  fontSize: '15px',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                  cursor: 'pointer',
+                  borderRadius: '2px',
+                  transition: 'filter 0.1s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.3)' }}
+                onMouseLeave={e => { e.currentTarget.style.filter = '' }}
+              >
+                {code}
+              </button>
+            )
+          })}
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '32px', fontSize: '10px', color: '#2a2a2a', letterSpacing: '1px' }}>
+          INTERNAL USE ONLY · SESSION EXPIRES 6PM ET
+        </div>
+
       </div>
     </div>
   )
