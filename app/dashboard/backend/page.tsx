@@ -474,7 +474,7 @@ export default function BackendPage() {
     // Runs on load + every 5 minutes so stale or missing values self-heal.
     async function backfillCdx() {
       try {
-        const { data, error } = await supabase.rpc('backfill_cdx_prices')
+        const { error } = await supabase.rpc('backfill_cdx_prices')
         if (error) console.warn('[cdx-backfill] rpc error:', error.message)
       } catch (e) {
         console.warn('[cdx-backfill] failed:', e)
@@ -1482,13 +1482,15 @@ export default function BackendPage() {
         const protSellerInfo = DEALER_INFO[protSellerCode]
 
         // ── Upfront PV: (100 − Price) / 100 × Notional ───────────────────────
+        // Only valid for dollar-price mode. Spread (bps) trades have no upfront PV.
         // Positive (price < 100): Protection Seller pays to Protection Buyer
         // Negative (price > 100): Protection Buyer pays to Protection Seller
-        const pvRaw      = (t.price != null && notional) ? ((100 - t.price) / 100) * notional : null
+        const isDollarPrice = t.mode === 'price' || t.mode === 'ticks'
+        const pvRaw      = (isDollarPrice && t.price != null && notional) ? ((100 - t.price) / 100) * notional : null
         const pvFmt      = pvRaw != null ? `$${Math.round(Math.abs(pvRaw)).toLocaleString()}` : '—'
-        const pvCalcStr  = (t.price != null && notional)
+        const pvCalcStr  = (isDollarPrice && t.price != null && notional)
           ? `(100.00 − ${t.price.toFixed(2)}) / 100 × $${notional.toLocaleString()}`
-          : ''
+          : t.mode === 'spread' ? 'N/A — spread-priced trade' : ''
         // Who pays / receives
         const upfrontPayer    = pvRaw == null ? '—'
           : pvRaw >= 0 ? (protSellerInfo?.legal ?? protSellerCode)  // price ≤ 100: Prot Seller pays

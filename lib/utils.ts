@@ -50,7 +50,7 @@ export function fmt32nds(n: number): string {
 export function formatPx(price: number | null | undefined, mode: string | null | undefined): string {
   if (price == null) return '—'
   if (mode === 'ticks') return fmt32nds(price)
-  if (mode === 'price') return `$${price}`
+  if (mode === 'price') return `$${price.toFixed(2)}`
   // Fallback: if mode is missing and the fractional part is a clean 32nds multiple,
   // display as ticks so old DB rows without mode don't show raw decimals
   if (mode == null || mode === '') {
@@ -67,13 +67,6 @@ export function fmtTime(ts: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(new Date(ts))
-}
-
-export function fmtDate(ts: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    month: 'short', day: 'numeric',
   }).format(new Date(ts))
 }
 

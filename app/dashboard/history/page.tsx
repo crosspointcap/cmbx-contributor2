@@ -240,13 +240,6 @@ export default function HistoryPage() {
   // CDX HY/IG: stamped value only — no daily close fallback.
   // Values are stamped at submission time from cdx_intraday (15-sec feed)
   // and corrected every 5 min by the backfill_cdx_prices() RPC.
-  function cdxHyFor(_ts: string, cdx_hy_at_time?: number | null): number | null {
-    return cdx_hy_at_time ?? null
-  }
-
-  function cdxIgFor(_ts: string, cdx_ig_at_time?: number | null): number | null {
-    return cdx_ig_at_time ?? null
-  }
 
   // ── Client-side search filter ─────────────────────────────────────────────
   const q = searchText.trim().toLowerCase()
@@ -451,8 +444,8 @@ export default function HistoryPage() {
                 const visibleDealer = showDealer ? (pc.dealer ?? '—') : '—'
                 const dealerColor   = showDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? dimClr) : emptyClr
                 const spx   = spxFor(pc.created_at, pc.spx_at_time)
-                const cdxHy = cdxHyFor(pc.created_at, pc.cdx_hy_at_time)
-                const cdxIg = cdxIgFor(pc.created_at, pc.cdx_ig_at_time)
+                const cdxHy = pc.cdx_hy_at_time ?? null
+                const cdxIg = pc.cdx_ig_at_time ?? null
                 return (
                   <tr key={pc.id} style={{ background: i % 2 === 0 ? rowEven : rowOdd, borderBottom: `1px solid ${borderClr}` }}>
                     <td style={{ padding: '3px 12px', color: dimClr }}>{fmtShortDate(pc.created_at)}</td>
@@ -522,8 +515,8 @@ export default function HistoryPage() {
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
                 const spx   = spxFor(t.created_at, t.spx_at_time)
-                const cdxHy = cdxHyFor(t.created_at, t.cdx_hy_at_time)
-                const cdxIg = cdxIgFor(t.created_at, t.cdx_ig_at_time)
+                const cdxHy = t.cdx_hy_at_time ?? null
+                const cdxIg = t.cdx_ig_at_time ?? null
                 return (
                   <tr key={t.id} style={{ background: i % 2 === 0 ? rowEven : rowOdd, borderBottom: `1px solid ${borderClr}` }}>
                     <td style={{ padding: '3px 12px', color: dimClr }}>{fmtShortDate(t.created_at)}</td>

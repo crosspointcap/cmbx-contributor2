@@ -7,13 +7,19 @@
  * (the session simply remains until the user closes the tab or logs out manually).
  */
 export function scheduleEodLogout(onLogout: () => void): () => void {
-  // Get current clock reading in ET (hours/minutes stay accurate for interval math
-  // even though the resulting Date object nominally uses local timezone).
-  const nowEt = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
-  const eodEt = new Date(nowEt)
-  eodEt.setHours(18, 0, 0, 0)
+  // Use Intl.DateTimeFormat parts — spec-compliant, works in all browsers.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hour12: false,
+  }).formatToParts(new Date())
 
-  const msUntil = eodEt.getTime() - nowEt.getTime()
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? 0)
+  const h = get('hour')
+  const m = get('minute')
+  const s = get('second')
+
+  const msUntil = ((18 - h) * 3600 - m * 60 - s) * 1000
   if (msUntil <= 0) return () => {} // already past 6pm ET — no timer needed
 
   const id = setTimeout(onLogout, msUntil)

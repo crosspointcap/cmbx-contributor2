@@ -92,7 +92,7 @@ export default function LoginPage() {
       }
 
       saveViewAs(viewAs)
-      window.location.href = viewAs === 'MARKET' ? '/dashboard/backend' : '/dashboard/market'
+      window.location.replace(viewAs === 'MARKET' ? '/dashboard/backend' : '/dashboard/market')
     } catch {
       setError('Unexpected error. Please try again.')
       setLoading(false)
