@@ -180,6 +180,7 @@ interface BlotterTrade {
   passive_dealer: string | null
   trade_size: number | null
   price: number | null
+  mode: string | null
 }
 
 
@@ -214,6 +215,7 @@ function mapTrade(t: any): BlotterTrade {
     passive_dealer: t.passive_dealer ?? null,
     trade_size:     t.trade_size    ?? null,
     price:          t.price,
+    mode:           t.mode          ?? null,
   }
 }
 
