@@ -264,8 +264,10 @@ function parseBulkLines(text: string): Array<{ series: string; bid: number | nul
       if (tok.includes('/')) {
         priceToks.push(tok)
       } else {
-        // Accept: -19, 19, t19, T19
-        const m = tok.match(/^-?(\d+)$/) || tok.match(/^[tT](\d+)$/)
+        // Accept: 19, -19, t19, T19, as19, aaa19, bbb-19, bb19, etc.
+        const m = tok.match(/^-?(\d+)$/)
+               || tok.match(/^[tT](\d+)$/)
+               || tok.match(/^[a-zA-Z][a-zA-Z-]*(\d+)$/)  // tranche-prefixed e.g. as19, bbb-15
         if (m) {
           const n = parseInt(m[1], 10)
           if (n > 0) seriesNums.push(n)
@@ -1378,7 +1380,7 @@ export default function BackendPage() {
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
               rows={8}
-              placeholder={'84-24/85-24 -15\n83-00/84-00 -14\n78-04/79-04 -13\n80-00/81-00 -12'}
+              placeholder={'as19 69/49\nas18 63/53\n— or —\n84-24/85-24 -15\n83-00/84-00 -14'}
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: '#080808', color: '#ccc',
@@ -1416,7 +1418,7 @@ export default function BackendPage() {
             {/* Parse errors hint */}
             {bulkText.trim() && parsedBulk.length === 0 && (
               <div style={{ marginTop: '10px', color: '#ff4444', fontSize: '12px' }}>
-                No valid lines found. Format: BID/ASK SERIES (e.g. 84-24/85-24 -15)
+                No valid lines found. Format: BID/ASK SERIES or TRANCHE+SERIES BID/ASK (e.g. "as19 69/49" or "84-24/85-24 -15")
               </div>
             )}
 
