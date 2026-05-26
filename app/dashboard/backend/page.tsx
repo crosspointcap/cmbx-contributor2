@@ -461,10 +461,10 @@ export default function BackendPage() {
       try {
         const res = await fetch('/api/cdx')
         const { cdx_hy, cdx_ig } = await res.json()
-        // Only fill null slots — never overwrite live values already set by cdx_intraday
+        // Prefer fresh API value; fall back to whatever realtime already set
         latestCdxRef.current = {
-          hy: latestCdxRef.current.hy ?? cdx_hy ?? null,
-          ig: latestCdxRef.current.ig ?? cdx_ig ?? null,
+          hy: cdx_hy ?? latestCdxRef.current.hy,
+          ig: cdx_ig ?? latestCdxRef.current.ig,
         }
       } catch {}
     }
