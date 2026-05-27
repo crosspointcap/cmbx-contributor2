@@ -25,7 +25,7 @@ interface Price {
   ask_dealer: string | null
   last_trade_px: number | null
   last_trade_time: string | null
-  mode: string
+  mode: string | null
 }
 
 interface SeriesConfig {
@@ -191,6 +191,12 @@ export default function MarketPage() {
       .on('broadcast', { event: 'price-saved' }, () => refreshPrices())
       .subscribe()
 
+    // ── Force-logout broadcast: admin can push all users back to login ─────────
+    const logoutCh = supabase
+      .channel('force-logout')
+      .on('broadcast', { event: 'force-logout' }, () => { clearSession(); window.location.replace('/login') })
+      .subscribe()
+
     loadData()
     return () => {
       cancelled = true
@@ -198,6 +204,7 @@ export default function MarketPage() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       supabase.removeChannel(ch)
       supabase.removeChannel(refreshCh)
+      supabase.removeChannel(logoutCh)
       // Clear any active flash timers on unmount
       Object.values(flashTimers.current).forEach(clearTimeout)
     }

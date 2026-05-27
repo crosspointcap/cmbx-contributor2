@@ -151,7 +151,11 @@ export default function HistoryPage() {
       .on('broadcast', { event: 'blotter-cleared' }, () => setTrades([]))
       .subscribe()
 
-    return () => { supabase.removeChannel(ch); supabase.removeChannel(broadcastCh) }
+    const logoutCh = supabase.channel('force-logout')
+      .on('broadcast', { event: 'force-logout' }, () => { clearSession(); window.location.replace('/login') })
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch); supabase.removeChannel(broadcastCh); supabase.removeChannel(logoutCh) }
   }, [])
 
   // ── Initial load ─────────────────────────────────────────────────────────────

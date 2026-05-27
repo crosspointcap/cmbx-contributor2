@@ -344,6 +344,7 @@ export default function BackendPage() {
   const selectedRowRef      = useRef(selectedRow)
   const blotterBroadcastRef   = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const priceRefreshRef       = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const forceLogoutRef        = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const latestSpxRef        = useRef<number | null>(null)
   const latestCdxRef        = useRef<{ hy: number | null; ig: number | null }>({ hy: null, ig: null })
   // MS delta-hedge snapshots: keyed by "series:tranche"
@@ -391,6 +392,14 @@ export default function BackendPage() {
       if (status === 'SUBSCRIBED') priceRefreshRef.current = ch
     })
     return () => { priceRefreshRef.current = null; supabase.removeChannel(ch) }
+  }, [])
+
+  useEffect(() => {
+    const ch = supabase.channel('force-logout')
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') forceLogoutRef.current = ch
+    })
+    return () => { forceLogoutRef.current = null; supabase.removeChannel(ch) }
   }, [])
 
   useEffect(() => {
@@ -1037,6 +1046,29 @@ export default function BackendPage() {
             }}
           >
             BLOTTER
+          </button>
+          <button
+            onClick={() => {
+              if (!window.confirm('Sign out ALL connected users? They will be redirected to the login page.')) return
+              forceLogoutRef.current?.send({ type: 'broadcast', event: 'force-logout', payload: {} })
+              clearSession()
+              window.location.replace('/login')
+            }}
+            style={{
+              background: 'transparent',
+              color: '#555',
+              border: '1px solid #2a2a2a',
+              padding: '2px 8px',
+              fontSize: '15px',
+              fontFamily: 'Courier New, monospace',
+              cursor: 'pointer',
+              borderRadius: '2px',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#ff5555'; e.currentTarget.style.borderColor = '#ff333344' }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.borderColor = '#2a2a2a' }}
+            title="Force all connected users to log out immediately"
+          >
+            SIGN OUT ALL
           </button>
         </div>
       </div>
