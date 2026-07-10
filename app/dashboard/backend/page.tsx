@@ -268,6 +268,7 @@ function parseBulkLines(text: string): Array<{ series: string; bid: number | nul
       } else {
         // Accept: 19, -19, t19, T19, as19, aaa19, bbb-19, bb19, etc.
         const m = tok.match(/^-?(\d+)$/)
+               || tok.match(/^-\.(\d+)$/)                 // Bloomberg BBB- format: -.19 → series 19
                || tok.match(/^[tT](\d+)$/)
                || tok.match(/^[a-zA-Z][a-zA-Z-]*(\d+)$/)  // tranche-prefixed e.g. as19, bbb-15
         if (m) {
