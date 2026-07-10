@@ -596,14 +596,17 @@ export default function BackendPage() {
 
     // ── Price fields (bid / ask) ──────────────────────────────────────────────
     // Detect format: 32nds ("80-01" or "$80-01"), dollar price ("$85.50"), or spread (plain number)
+    // Dollar-format prices are auto-converted to 32nds ticks so display is always consistent
     const stripped = trimmed.startsWith('$') ? trimmed.slice(1) : trimmed
     const is32nds  = /^\d+-\d{1,2}$/.test(stripped)
     const isDollar = !is32nds && trimmed.startsWith('$')
-    const mode     = is32nds ? 'ticks' : isDollar ? 'price' : 'spread'
 
-    const numericValue: number | null =
+    let mode: 'ticks' | 'price' | 'spread' = is32nds ? 'ticks' : isDollar ? 'ticks' : 'spread'
+
+    let numericValue: number | null =
       stripped === '' ? null :
       is32nds         ? parse32nds(stripped) :
+      isDollar        ? (() => { const f = parseFloat(stripped); if (isNaN(f)) return null; const whole = Math.floor(f); const ticks = Math.round((f - whole) * 32); return whole + ticks / 32 })() :
                         (parseFloat(stripped) || null)
 
     // ── Market protection: a different dealer cannot post a worse price ─────────
