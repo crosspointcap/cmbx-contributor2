@@ -934,10 +934,7 @@ export default function BackendPage() {
           setEditingCell({ key, field })
           // Pre-populate in the correct display format
           if (rawVal != null && (field === 'bid' || field === 'ask')) {
-            const mode = price?.mode
-            if (mode === 'ticks')       setEditValue(fmt32nds(rawVal as number))
-            else if (mode === 'price')  setEditValue(`$${rawVal}`)
-            else                        setEditValue(String(rawVal))
+            setEditValue(fmt32nds(rawVal as number))
           } else {
             setEditValue(rawVal != null ? String(rawVal) : '')
           }
@@ -1509,7 +1506,7 @@ export default function BackendPage() {
         const index      = `CMBX.NA.${t.tranche}.${t.series}`
         const feePerMM   = FACILITATION_FEE_PER_MM[t.tranche] ?? 115
         const facFee     = notional ? `$${(notional / 1_000_000 * feePerMM).toLocaleString()}` : '—'
-        const priceDecimal = t.price != null ? t.price.toFixed(2) : '—'
+        const priceDecimal = t.price != null ? fmt32nds(t.price) : '—'
 
         // ── Protection Buyer = Seller of Risk (SHORT) ─────────────────────────
         // LIFT: active dealer lifts ask → active = Protection Buyer (Seller of Risk)
@@ -1529,7 +1526,7 @@ export default function BackendPage() {
         const pvRaw      = (isDollarPrice && t.price != null && notional) ? ((100 - t.price) / 100) * notional : null
         const pvFmt      = pvRaw != null ? `$${Math.round(Math.abs(pvRaw)).toLocaleString()}` : '—'
         const pvCalcStr  = (isDollarPrice && t.price != null && notional)
-          ? `(100.00 − ${t.price.toFixed(2)}) / 100 × $${notional.toLocaleString()}`
+          ? `(100-00 − ${fmt32nds(t.price)}) / 100 × $${notional.toLocaleString()}`
           : t.mode === 'spread' ? 'N/A — spread-priced trade' : ''
         // Who pays / receives
         const upfrontPayer    = pvRaw == null ? '—'
