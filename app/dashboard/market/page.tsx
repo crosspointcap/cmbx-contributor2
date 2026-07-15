@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { NavTabs } from '../NavTabs'
-import { formatPx, fmtTime, isLight } from '../../../lib/utils'
+import { formatPx, fmt32nds, fmtTime, isLight } from '../../../lib/utils'
 import { Theme, DEFAULT_THEME, loadTheme, saveTheme, loadViewAs, hasValidSession, clearSession, ViewAs } from '../../../lib/theme'
 import { ThemePanel } from '../ThemePanel'
 import { scheduleEodLogout } from '../../../lib/eod-logout'
@@ -220,6 +220,41 @@ export default function MarketPage() {
     }, 30000)
   }
 
+  const [copyFlash, setCopyFlash] = useState(false)
+
+  function copyMarkets() {
+    const now = new Date()
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/New_York' })
+
+    const lines: string[] = [
+      `CMBX MARKETS — ${dateStr}  ${timeStr} ET`,
+      '',
+    ]
+
+    for (const s of series) {
+      const rowsForSeries: string[] = []
+      for (const t of tranches) {
+        const key = `${s.series_number}:${t.tranche_name}`
+        const price = prices[key]
+        if (price?.bid == null && price?.ask == null) continue
+        const bid = price.bid != null ? fmt32nds(price.bid) : '—'
+        const ask = price.ask != null ? fmt32nds(price.ask) : '—'
+        const tranche = `${t.tranche_name}.${s.series_number}`
+        rowsForSeries.push(`${tranche.padEnd(12)}${bid.padStart(8)} / ${ask.padStart(7)}`)
+      }
+      if (rowsForSeries.length > 0) {
+        lines.push(`CMBX.${s.series_number}`)
+        lines.push(...rowsForSeries)
+        lines.push('')
+      }
+    }
+
+    navigator.clipboard.writeText(lines.join('\n'))
+    setCopyFlash(true)
+    setTimeout(() => setCopyFlash(false), 1200)
+  }
+
   function handleSaveTheme(t: Theme) {
     setTheme(t)
     setShowSettings(false)
@@ -251,6 +286,25 @@ export default function MarketPage() {
             <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: rtOk ? '#44cc44' : '#ff5555', boxShadow: rtOk ? '0 0 4px #44cc44' : '0 0 4px #ff5555' }} />
             {rtOk ? 'LIVE' : 'POLLING'}
           </span>
+          {/* Copy markets */}
+          <button
+            onClick={copyMarkets}
+            style={{
+              background: copyFlash ? '#1a3a1a' : 'transparent',
+              color: copyFlash ? '#44ff44' : theme.accent,
+              border: `1px solid ${copyFlash ? '#44ff44' : theme.accent}88`,
+              fontFamily: 'Courier New, monospace',
+              fontSize: '10px',
+              letterSpacing: '1px',
+              padding: '3px 10px',
+              cursor: 'pointer',
+              borderRadius: '2px',
+              fontWeight: 700,
+              transition: 'all 0.2s',
+            }}
+          >
+            {copyFlash ? 'COPIED ✓' : 'COPY'}
+          </button>
           {/* Sign out */}
           <button
             onClick={() => { clearSession(); window.location.href = '/login' }}
