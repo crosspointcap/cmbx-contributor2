@@ -113,11 +113,6 @@ export default function MarketPage() {
         window.location.replace('/login')
         return
       }
-      // Admin trying to reach market page → send to backend
-      if (role === 'MARKET') {
-        window.location.replace('/dashboard/backend')
-        return
-      }
       setViewAs(role)
       setTheme(loadTheme())
       const cancelEod = scheduleEodLogout(() => { clearSession(); window.location.href = '/login' })
