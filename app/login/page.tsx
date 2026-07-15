@@ -211,6 +211,42 @@ export default function LoginPage() {
         </div>
 
       </div>
+
+      {/* Legal Disclaimer */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        maxHeight: '28vh',
+        overflowY: 'auto',
+        background: '#050505',
+        borderTop: '1px solid #1a1a1a',
+        padding: '12px 24px 16px',
+        fontFamily: 'Courier New, monospace',
+      }}>
+        <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+          <div style={{ fontSize: '8px', color: '#888', letterSpacing: '2px', marginBottom: '8px', fontWeight: 700 }}>
+            LEGAL DISCLAIMER &amp; TERMS OF ACCESS
+          </div>
+          {[
+            ['Regulatory status.', 'Crosspoint Capital operates this screen solely as a FINRA-registered Broker Dealer. This screen is a voice and hybrid communication facility only. Crosspoint does not operate a swap execution facility ("SEF"), alternative trading system ("ATS"), exchange, or any multilateral execution platform, and does not satisfy the conditions requiring SEF registration under Section 5h of the Commodity Exchange Act or CFTC regulations thereunder [17 CFR Part 37; CFTC Staff Letter 14-147]. All transactions are bilaterally negotiated off-screen on a name give-up basis.'],
+            ['Indicative only — subject to call.', 'All bids, offers, and pricing information ("Quotes") displayed are indicative and non-binding. Quotes are communicated by dealer participants and posted manually by Crosspoint personnel. Quotes may be withdrawn, modified, or cancelled at any time without notice. No transaction is formed by viewing any Quote.'],
+            ['Latency, accuracy & timing disputes.', 'Quotes displayed on this screen are subject to inherent transmission latency arising from the voice and hybrid nature of Crosspoint\'s brokerage operations. A material delay may exist between the time a dealer communicates a bid, offer, or withdrawal and the time such communication is reflected on screen. Accordingly, any Quote displayed may be stale, superseded, withdrawn, or no longer available at the time of viewing. In the event of any dispute concerning the timing of a communication, withdrawal, or transaction, Crosspoint\'s internal records — including system-generated timestamps, communication logs, and voice recordings where applicable — shall serve as the authoritative reference for establishing the sequence and timing of events. All participants acknowledge and accept the inherent operational latency of a voice and hybrid communication facility as a condition of access.'],
+            ['Name give-up only.', 'Crosspoint is not a principal, counterparty, market maker, dealer, clearing member, or central counterparty to any transaction. Crosspoint does not take positions, guarantee any Quote, or guarantee the credit, performance, or settlement of any dealer participant. Bilateral settlement is solely the responsibility of the transacting counterparties.'],
+            ['Eligibility.', 'Access is restricted to eligible contract participants as defined under the Commodity Exchange Act and to permissioned institutional counterparties. Use of this screen by any other person is unauthorized.'],
+            ['No solicitation. No advice. No best execution.', 'Nothing on this screen constitutes an offer, solicitation, advice, recommendation, or research of any kind. Crosspoint owes no duty of best execution, best price, or suitability to any user [FINRA Rule 5310 — inapplicable]. Users are presumed to be sophisticated institutions capable of independent assessment.'],
+            ['Limitation of liability.', 'To the maximum extent permitted by law, Crosspoint Capital, its affiliates, officers, and employees shall have no liability whatsoever for any direct, indirect, incidental, special, consequential, or punitive damages arising from use of or reliance on this screen or any Quote displayed hereon, except in cases of gross negligence or willful misconduct as finally determined by the applicable dispute resolution body.'],
+            ['Dispute resolution.', 'FINRA members: Any dispute arising out of or relating to this screen or any transaction facilitated herein between Crosspoint and any FINRA member firm or associated person is subject to mandatory arbitration before FINRA under the Code of Arbitration Procedure for Industry Disputes [Rule 13200].'],
+            ['Books & records.', 'Crosspoint maintains screen activity and acceptance logs in accordance with applicable FINRA and CFTC recordkeeping obligations.'],
+          ].map(([heading, body]) => (
+            <div key={heading} style={{ marginBottom: '5px', fontSize: '8px', lineHeight: '1.5', color: '#333' }}>
+              <span style={{ color: '#555', fontWeight: 700 }}>{heading} </span>
+              {body}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
