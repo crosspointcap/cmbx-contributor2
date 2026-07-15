@@ -1175,7 +1175,7 @@ export default function BackendPage() {
                   <td
                     colSpan={6}
                     style={{
-                      padding: '8px 12px 5px 10px',
+                      padding: '3px 12px 2px 10px',
                       color: theme.accent,
                       background: '#0e0e0e',
                       fontSize: '15px',
@@ -1260,14 +1260,14 @@ export default function BackendPage() {
                       onClick={() => setSelectedRow(prev => prev === rowKey ? null : rowKey)}
                       style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
                     >
-                      <td style={{ padding: '3px 8px 3px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px', fontWeight: 700 }}>
+                      <td style={{ padding: '1px 8px 1px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px', fontWeight: 700 }}>
                         {`${t.tranche_name}.${s.series_number}`}
                       </td>
-                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '3px 8px' })}
-                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'center', padding: '3px 10px', borderLeft: '2px solid #1a3a1a' })}
-                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'center', padding: '3px 10px', borderLeft: '2px solid #3a1a1a' })}
-                      {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'center', padding: '3px 8px' })}
-                      <td style={{ textAlign: 'right', padding: '3px 10px' }}>
+                      {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '1px 8px' })}
+                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #1a3a1a' })}
+                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #3a1a1a' })}
+                      {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'center', padding: '1px 8px' })}
+                      <td style={{ textAlign: 'right', padding: '1px 10px' }}>
                         {price?.last_trade_px != null ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
                             <span style={{ color: '#888' }}>{formatPx(price.last_trade_px, price.mode)}</span>
