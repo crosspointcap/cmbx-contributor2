@@ -91,15 +91,38 @@ export default function MarketPage() {
   const myDealerCode: string | null = viewAs === 'MARKET' ? null : viewAs
 
   // ── Session check + theme + VIEW AS + EOD ────────────────────────────────
+  // Role is derived from the Supabase-signed JWT email — cannot be spoofed via localStorage
   useEffect(() => {
-    if (!hasValidSession()) {
-      window.location.replace('/login')
-      return
+    const EMAIL_ROLE_MAP: Record<string, ViewAs> = {
+      'ms@cpc-market.com':            'MS',
+      'boa@cpc-market.com':           'BOA',
+      'citi@cpc-market.com':          'CITI',
+      'jpmorgan@cpc-market.com':      'JPM',
+      'gs@cpc-market.com':            'GS',
+      'ubs@cpc-market.com':           'UBS',
+      'bnp@cpc-market.com':           'BNP',
+      'db@cpc-market.com':            'DB',
+      'barc@cpc-market.com':          'BARC',
+      'admin@crosspoint-capital.com': 'MARKET',
     }
-    setTheme(loadTheme())
-    setViewAs(loadViewAs())
-    const cancelEod = scheduleEodLogout(() => { clearSession(); window.location.href = '/login' })
-    return () => cancelEod()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const email = session?.user?.email?.toLowerCase().trim() ?? ''
+      const role = EMAIL_ROLE_MAP[email]
+      if (!session || !role) {
+        clearSession()
+        window.location.replace('/login')
+        return
+      }
+      // Admin trying to reach market page → send to backend
+      if (role === 'MARKET') {
+        window.location.replace('/dashboard/backend')
+        return
+      }
+      setViewAs(role)
+      setTheme(loadTheme())
+      const cancelEod = scheduleEodLogout(() => { clearSession(); window.location.href = '/login' })
+      return () => cancelEod()
+    })
   }, [])
 
   // ── Column visibility — persist to localStorage ───────────────────────────

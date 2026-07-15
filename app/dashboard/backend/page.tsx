@@ -354,21 +354,21 @@ export default function BackendPage() {
   selectedRowRef.current    = selectedRow
 
   // Access gate + theme load
+  // Verifies the Supabase-signed JWT — cannot be bypassed via localStorage/DevTools
   useEffect(() => {
-    // No session today → back to login
-    if (!hasValidSession()) {
-      window.location.replace('/login')
-      return
-    }
-    // Dealer session → redirect to market (admin page is MARKET-only)
-    if (loadViewAs() !== 'MARKET') {
-      window.location.replace('/dashboard/market')
-      return
-    }
-    setTheme(loadTheme())
-    setAuthChecked(true)
-    const cancelEod = scheduleEodLogout(() => { clearSession(); window.location.href = '/login' })
-    return () => cancelEod()
+    const ADMIN_EMAILS = ['admin@crosspoint-capital.com']
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const email = session?.user?.email?.toLowerCase().trim() ?? ''
+      if (!session || !ADMIN_EMAILS.includes(email)) {
+        clearSession()
+        window.location.replace(session ? '/dashboard/market' : '/login')
+        return
+      }
+      setTheme(loadTheme())
+      setAuthChecked(true)
+      const cancelEod = scheduleEodLogout(() => { clearSession(); window.location.href = '/login' })
+      return () => cancelEod()
+    })
   }, [])
 
   useEffect(() => {
