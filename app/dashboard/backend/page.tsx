@@ -601,14 +601,16 @@ export default function BackendPage() {
     const stripped = trimmed.startsWith('$') ? trimmed.slice(1) : trimmed
     const is32nds  = /^\d+-\d{1,2}$/.test(stripped)
     const isDollar = !is32nds && trimmed.startsWith('$')
+    const isSpread = !is32nds && !isDollar && stripped !== ''
 
-    const mode = 'ticks'
+    const mode: 'ticks' | 'spread' = isSpread ? 'spread' : 'ticks'
 
     let numericValue: number | null =
       stripped === '' ? null :
       is32nds         ? parse32nds(stripped) :
       isDollar        ? (() => { const f = parseFloat(stripped); if (isNaN(f)) return null; const whole = Math.floor(f); const ticks = Math.round((f - whole) * 32); return whole + ticks / 32 })() :
-                        (parseFloat(stripped) || null)
+      isSpread        ? (() => { const f = parseFloat(stripped); return isNaN(f) ? null : Math.round(f) })() :
+                        null
 
     // ── Market protection: a different dealer cannot post a worse price ─────────
     // Bid: higher is better — block if new bid < existing bid from another dealer
@@ -934,7 +936,7 @@ export default function BackendPage() {
           setEditingCell({ key, field })
           // Pre-populate in the correct display format
           if (rawVal != null && (field === 'bid' || field === 'ask')) {
-            setEditValue(fmt32nds(rawVal as number))
+            setEditValue(price?.mode === 'spread' ? String(Math.round(rawVal as number)) : fmt32nds(rawVal as number))
           } else {
             setEditValue(rawVal != null ? String(rawVal) : '')
           }

@@ -49,6 +49,7 @@ export function fmt32nds(n: number): string {
 
 export function formatPx(price: number | null | undefined, mode: string | null | undefined): string {
   if (price == null) return '—'
+  if (mode === 'spread') return String(Math.round(price))
   return fmt32nds(price)
 }
 
