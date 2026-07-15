@@ -1151,9 +1151,9 @@ export default function BackendPage() {
       {/* Grid + Blotter */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
           <thead>
-            <tr style={{ color: '#ffffff', fontSize: '11.5px', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
+            <tr style={{ color: '#ffffff', fontSize: '12.5px', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
               <th style={{ textAlign: 'left',   padding: '3px 8px 3px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
               <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
               <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: `2px solid ${theme.bid}`, minWidth: '100px', fontWeight: 700 }}>BID</th>
@@ -1178,7 +1178,7 @@ export default function BackendPage() {
                       padding: '3px 12px 2px 10px',
                       color: theme.accent,
                       background: '#0e0e0e',
-                      fontSize: '11.5px',
+                      fontSize: '12.5px',
                       fontWeight: 600,
                       letterSpacing: '1px',
                       borderBottom: '1px solid #1e1e1e',
@@ -1702,7 +1702,7 @@ export default function BackendPage() {
               </table>
 
               {/* ── Footer ───────────────────────────────────────────────────── */}
-              <div style={{ fontSize: '11.5px', color: '#555', lineHeight: '1.7', marginBottom: '24px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
+              <div style={{ fontSize: '12.5px', color: '#555', lineHeight: '1.7', marginBottom: '24px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
                 This document confirms the terms agreed between <strong>{protBuyerInfo?.legal ?? protBuyerCode}</strong> (Protection Buyer) and <strong>{protSellerInfo?.legal ?? protSellerCode}</strong> (Protection Seller) for the {index} trade executed on <strong>{tradeDate}</strong>. Effective date is T+0. Settlement date is T+3 business days (<strong>{settlDate}</strong>). All terms are subject to the ISDA Master Agreement and related Schedule executed between the parties.
               </div>
 
