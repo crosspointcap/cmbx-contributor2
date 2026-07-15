@@ -1151,9 +1151,9 @@ export default function BackendPage() {
       {/* Grid + Blotter */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.75px' }}>
           <thead>
-            <tr style={{ color: '#ffffff', fontSize: '12.5px', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
+            <tr style={{ color: '#ffffff', fontSize: '12.75px', position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
               <th style={{ textAlign: 'left',   padding: '3px 8px 3px 12px', borderBottom: '1px solid #1e1e1e', width: '160px', fontWeight: 700 }}>TRANCHE</th>
               <th style={{ textAlign: 'center', padding: '3px 8px',  borderBottom: '1px solid #1e1e1e', minWidth: '70px',  fontWeight: 700 }}>SIZE</th>
               <th style={{ textAlign: 'center', padding: '3px 10px', borderBottom: `2px solid ${theme.bid}`, minWidth: '100px', fontWeight: 700 }}>BID</th>
@@ -1178,7 +1178,7 @@ export default function BackendPage() {
                       padding: '3px 12px 2px 10px',
                       color: theme.accent,
                       background: '#0e0e0e',
-                      fontSize: '12.5px',
+                      fontSize: '12.75px',
                       fontWeight: 600,
                       letterSpacing: '1px',
                       borderBottom: '1px solid #1e1e1e',
@@ -1575,8 +1575,8 @@ export default function BackendPage() {
 
         const row = (label: string, value: React.ReactNode, shade: boolean) => (
           <tr style={{ background: shade ? '#f8f9fc' : '#fff' }}>
-            <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>{label}</td>
-            <td style={{ padding: '6px 14px', fontWeight: 500, borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>{value}</td>
+            <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.75px' }}>{label}</td>
+            <td style={{ padding: '6px 14px', fontWeight: 500, borderBottom: '1px solid #efefef', fontSize: '12.75px' }}>{value}</td>
           </tr>
         )
 
@@ -1607,7 +1607,7 @@ export default function BackendPage() {
 
               {/* ── Parties ──────────────────────────────────────────────────── */}
               <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Parties to the Transaction</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', fontSize: '12.5px', border: '1px solid #e0e0e0' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '22px', fontSize: '12.75px', border: '1px solid #e0e0e0' }}>
                 <tbody>
                   <tr style={{ background: '#fff6f6' }}>
                     <td style={{ padding: '12px 14px', borderBottom: '1px solid #e0e0e0', width: '210px', verticalAlign: 'top' }}>
@@ -1657,16 +1657,16 @@ export default function BackendPage() {
                   {row('Effective Date', `${tradeDate}  (T+0)`, false)}
                   {row('Settlement Date', `${settlDate}  (T+3 business days)`, true)}
                   <tr style={{ background: '#fff' }}>
-                    <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.5px' }}>Spread (bps)</td>
+                    <td style={{ padding: '6px 14px', color: '#555', width: '210px', borderBottom: '1px solid #efefef', fontSize: '12.75px' }}>Spread (bps)</td>
                     <td style={{ padding: '4px 14px', borderBottom: '1px solid #efefef' }}>
                       <input
                         className="no-print"
                         value={confirmSpread}
                         onChange={e => setConfirmSpread(e.target.value)}
                         placeholder="enter implied spread..."
-                        style={{ border: '1px solid #bbb', padding: '2px 8px', fontSize: '12.5px', fontFamily: 'Georgia, serif', width: '200px', color: '#222', borderRadius: '2px' }}
+                        style={{ border: '1px solid #bbb', padding: '2px 8px', fontSize: '12.75px', fontFamily: 'Georgia, serif', width: '200px', color: '#222', borderRadius: '2px' }}
                       />
-                      <span className="print-only" style={{ display: 'none', fontSize: '12.5px', fontWeight: 500 }}>{confirmSpread}</span>
+                      <span className="print-only" style={{ display: 'none', fontSize: '12.75px', fontWeight: 500 }}>{confirmSpread}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -1676,7 +1676,7 @@ export default function BackendPage() {
               <div style={{ color: '#2255aa', fontWeight: 700, fontSize: '11px', letterSpacing: '1.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Upfront Payment (Present Value)</div>
               <div style={{ border: '1px solid #d0d8ee', background: '#f4f7fb', padding: '14px 18px', marginBottom: '22px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                  <span style={{ color: '#444', fontSize: '12.5px' }}>PV Amount:</span>
+                  <span style={{ color: '#444', fontSize: '12.75px' }}>PV Amount:</span>
                   <span style={{ fontWeight: 700, fontSize: '18px', color: '#111' }}>{pvFmt}</span>
                 </div>
                 {pvCalcStr && (
@@ -1684,7 +1684,7 @@ export default function BackendPage() {
                     {pvCalcStr}
                   </div>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '4px', fontSize: '12.5px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '4px', fontSize: '12.75px' }}>
                   <span style={{ color: '#555' }}>Payable by:</span>
                   <span style={{ fontWeight: 600, color: '#881111' }}>{upfrontPayer}</span>
                   <span style={{ color: '#555' }}>Payable to:</span>
@@ -1702,7 +1702,7 @@ export default function BackendPage() {
               </table>
 
               {/* ── Footer ───────────────────────────────────────────────────── */}
-              <div style={{ fontSize: '12.5px', color: '#555', lineHeight: '1.7', marginBottom: '24px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
+              <div style={{ fontSize: '12.75px', color: '#555', lineHeight: '1.7', marginBottom: '24px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
                 This document confirms the terms agreed between <strong>{protBuyerInfo?.legal ?? protBuyerCode}</strong> (Protection Buyer) and <strong>{protSellerInfo?.legal ?? protSellerCode}</strong> (Protection Seller) for the {index} trade executed on <strong>{tradeDate}</strong>. Effective date is T+0. Settlement date is T+3 business days (<strong>{settlDate}</strong>). All terms are subject to the ISDA Master Agreement and related Schedule executed between the parties.
               </div>
 

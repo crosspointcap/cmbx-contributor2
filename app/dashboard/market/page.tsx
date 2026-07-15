@@ -319,7 +319,7 @@ export default function MarketPage() {
             const oddRowBg   = light ? '#f0f2f5' : '#0d0d0d'
 
             return (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.75px' }}>
             <thead>
               <tr style={{ position: 'sticky', top: 0, background: theme.bg, zIndex: 1 } as React.CSSProperties}>
                 <th style={{ textAlign: 'left', padding: '2px 6px 2px 10px', borderBottom: `1px solid ${borderClr}`, width: '88px', fontWeight: 600, color: theme.fg }}>TRANCHE</th>
@@ -348,7 +348,7 @@ export default function MarketPage() {
                           padding: '2px 10px 1px 10px',
                           color: theme.accent,
                           background: headerBg,
-                          fontSize: '12.5px',
+                          fontSize: '12.75px',
                           fontWeight: 700,
                           letterSpacing: '2px',
                           borderBottom: `1px solid ${headerBdr}`,
@@ -377,7 +377,7 @@ export default function MarketPage() {
                           key={rowKey}
                           style={{ background: rowBg, borderBottom: `1px solid ${borderClr}` }}
                         >
-                          <td style={{ padding: '1px 6px 1px 10px', color: theme.fg, whiteSpace: 'nowrap', width: '100px', fontSize: '12.5px', fontWeight: 700 }}>
+                          <td style={{ padding: '1px 6px 1px 10px', color: theme.fg, whiteSpace: 'nowrap', width: '100px', fontSize: '12.75px', fontWeight: 700 }}>
                             {t.tranche_name}.{s.series_number}
                           </td>
                           {!hiddenCols.has('bid') && (
