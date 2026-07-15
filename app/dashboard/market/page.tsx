@@ -256,8 +256,8 @@ export default function MarketPage() {
         const key = `${s.series_number}:${t.tranche_name}`
         const price = prices[key]
         if (price?.bid == null && price?.ask == null) continue
-        const bid = price.bid != null ? fmt32nds(price.bid) : '—'
-        const ask = price.ask != null ? fmt32nds(price.ask) : '—'
+        const bid = price.bid != null ? formatPx(price.bid, price.mode) : '—'
+        const ask = price.ask != null ? formatPx(price.ask, price.mode) : '—'
         const tranche = `${t.tranche_name}.${s.series_number}`
         rowsForSeries.push(`${tranche.padEnd(12)}${bid.padStart(8)} / ${ask.padStart(7)}`)
       }
