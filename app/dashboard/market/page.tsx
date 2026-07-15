@@ -244,9 +244,7 @@ export default function MarketPage() {
         rowsForSeries.push(`${tranche.padEnd(12)}${bid.padStart(8)} / ${ask.padStart(7)}`)
       }
       if (rowsForSeries.length > 0) {
-        lines.push(`CMBX.${s.series_number}`)
         lines.push(...rowsForSeries)
-        lines.push('')
       }
     }
 
