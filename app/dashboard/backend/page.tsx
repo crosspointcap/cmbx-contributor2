@@ -365,6 +365,10 @@ export default function BackendPage() {
         return
       }
       setTheme(loadTheme())
+      try {
+        const saved = localStorage.getItem('cmbx_dealer_timeouts')
+        if (saved) setPulledPrices(JSON.parse(saved))
+      } catch {}
       setAuthChecked(true)
       const cancelEod = scheduleEodLogout(() => { clearSession(); window.location.href = '/login' })
       return () => cancelEod()
@@ -853,6 +857,12 @@ export default function BackendPage() {
     return Object.values(prices).filter(p => p.bid_dealer === code || p.ask_dealer === code).length
   }
 
+  const TIMEOUT_STORAGE_KEY = 'cmbx_dealer_timeouts'
+
+  function saveTimeoutsToStorage(updated: typeof pulledPrices) {
+    try { localStorage.setItem(TIMEOUT_STORAGE_KEY, JSON.stringify(updated)) } catch {}
+  }
+
   async function pullDealerPrices(code: string) {
     const snapshot: Array<{ series_number: string; tranche_name: string; mode?: string | null; bid?: number | null; bid_size?: string | null; ask?: number | null; ask_size?: string | null }> = []
     for (const [key, p] of Object.entries(prices)) {
@@ -870,7 +880,13 @@ export default function BackendPage() {
       if (hasAsk) { update.ask = null; update.ask_dealer = null; update.ask_size = null }
       await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
     }
-    if (snapshot.length > 0) setPulledPrices(prev => ({ ...prev, [code]: snapshot }))
+    if (snapshot.length > 0) {
+      setPulledPrices(prev => {
+        const updated = { ...prev, [code]: snapshot }
+        saveTimeoutsToStorage(updated)
+        return updated
+      })
+    }
   }
 
   async function restoreDealerPrices(code: string) {
@@ -883,7 +899,12 @@ export default function BackendPage() {
       if (item.ask != null) { update.ask = item.ask; update.ask_dealer = code; update.ask_size = item.ask_size ?? null }
       await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
     }
-    setPulledPrices(prev => { const n = { ...prev }; delete n[code]; return n })
+    setPulledPrices(prev => {
+      const updated = { ...prev }
+      delete updated[code]
+      saveTimeoutsToStorage(updated)
+      return updated
+    })
   }
 
   async function executeTrade(side: 'hit' | 'lift') {
