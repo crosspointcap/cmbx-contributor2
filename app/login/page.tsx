@@ -206,10 +206,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '32px', fontSize: '10px', color: '#2a2a2a', letterSpacing: '1px' }}>
-          INTERNAL USE ONLY · SESSION EXPIRES AT MIDNIGHT ET
-        </div>
-
       </div>
 
       {/* Legal Disclaimer */}
