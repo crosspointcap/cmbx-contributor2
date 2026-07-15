@@ -602,7 +602,7 @@ export default function BackendPage() {
     const is32nds  = /^\d+-\d{1,2}$/.test(stripped)
     const isDollar = !is32nds && trimmed.startsWith('$')
 
-    let mode: 'ticks' | 'price' | 'spread' = is32nds ? 'ticks' : isDollar ? 'ticks' : 'spread'
+    const mode = 'ticks'
 
     let numericValue: number | null =
       stripped === '' ? null :
