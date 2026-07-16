@@ -345,6 +345,7 @@ export default function BackendPage() {
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [bulkResult,    setBulkResult]    = useState<{ bids: number; asks: number; changes: { label: string; side: string; from: string; to: string }[] } | null>(null)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
+  const [filterDealer, setFilterDealer] = useState<string | null>(null)
   const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
   const [showSettings, setShowSettings] = useState(false)
   const [rtOk,         setRtOk]         = useState(true)
@@ -840,29 +841,38 @@ export default function BackendPage() {
       for (const r of parsedBulk) {
         const sz = bulkSize.trim() || String(DEFAULT_SIZE[r.tranche] ?? 5)
         const existing = prices[`${r.series}:${r.tranche}`]
+        // Best-bid / best-offer guard: a different dealer can only replace an
+        // existing price if their price is strictly better (higher bid, lower ask).
+        const canPostBid = r.bid != null && (
+          existing?.bid == null || existing.bid_dealer === dealer || r.bid > existing.bid
+        )
+        const canPostAsk = r.ask != null && (
+          existing?.ask == null || existing.ask_dealer === dealer || r.ask < existing.ask
+        )
         const upsertRow: Record<string, unknown> = {
           series_number: r.series, tranche_name: r.tranche, mode: r.mode,
         }
-        if (r.bid != null) { upsertRow.bid = r.bid; upsertRow.bid_dealer = dealer; upsertRow.bid_size = sz }
-        if (r.ask != null) { upsertRow.ask = r.ask; upsertRow.ask_dealer = dealer; upsertRow.ask_size = sz }
+        if (canPostBid) { upsertRow.bid = r.bid; upsertRow.bid_dealer = dealer; upsertRow.bid_size = sz }
+        if (canPostAsk) { upsertRow.ask = r.ask; upsertRow.ask_dealer = dealer; upsertRow.ask_size = sz }
+        if (!canPostBid && !canPostAsk) continue
         const { error: priceErr } = await supabase.from('prices').upsert(upsertRow, { onConflict: 'series_number,tranche_name' })
         if (!priceErr) {
           const label = `${r.tranche}.${r.series}`
-          if (r.bid != null) {
+          if (canPostBid) {
             postedBids++
-            changes.push({ label, side: 'bid', from: existing?.bid != null ? formatPx(existing.bid, existing.mode) : '—', to: formatPx(r.bid, r.mode) })
+            changes.push({ label, side: 'bid', from: existing?.bid != null ? formatPx(existing.bid, existing.mode) : '—', to: formatPx(r.bid!, r.mode) })
           }
-          if (r.ask != null) {
+          if (canPostAsk) {
             postedAsks++
-            changes.push({ label, side: 'ask', from: existing?.ask != null ? formatPx(existing.ask, existing.mode) : '—', to: formatPx(r.ask, r.mode) })
+            changes.push({ label, side: 'ask', from: existing?.ask != null ? formatPx(existing.ask, existing.mode) : '—', to: formatPx(r.ask!, r.mode) })
           }
         } else {
           console.warn('[bulk upsert]', priceErr.message)
         }
         const auditRows: object[] = []
         const sz2 = bulkSize.trim() || String(DEFAULT_SIZE[r.tranche] ?? 5)
-        if (r.bid != null) auditRows.push({ series_number: r.series, tranche_name: r.tranche, dealer, side: 'bid', price: r.bid, size: sz2, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
-        if (r.ask != null) auditRows.push({ series_number: r.series, tranche_name: r.tranche, dealer, side: 'ask', price: r.ask, size: sz2, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        if (canPostBid) auditRows.push({ series_number: r.series, tranche_name: r.tranche, dealer, side: 'bid', price: r.bid, size: sz2, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        if (canPostAsk) auditRows.push({ series_number: r.series, tranche_name: r.tranche, dealer, side: 'ask', price: r.ask, size: sz2, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
         if (auditRows.length > 0) {
           const { error: auditErr } = await supabase.from('price_changes').insert(auditRows)
           if (auditErr) console.warn('[bulk price_changes]', auditErr.message)
@@ -1183,7 +1193,7 @@ export default function BackendPage() {
           style={{ background: theme.bid + '22', color: theme.bid, border: `1px solid ${theme.bid}88`, padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center', animation: liftShake ? 'shake 0.5s ease' : 'none' }}>
           LIFT
         </button>
-        <button onClick={() => setShowBulkInput(true)}
+        <button onClick={() => { setBulkText(''); setBulkResult(null); setShowBulkInput(true) }}
           style={{ background: '#0a1a0a', color: '#66ff88', border: '1px solid #336633', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700, alignSelf: 'center' }}>
           BULK
         </button>
@@ -1204,6 +1214,46 @@ export default function BackendPage() {
             <span style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700 }}>CLEAR ALL PRICES?</span>
             <button onClick={clearAllPrices} style={{ background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer', fontWeight: 700 }}>YES</button>
             <button onClick={() => setConfirmClear(false)} style={{ background: '#111', color: '#555', border: '1px solid #333', padding: '2px 10px', fontSize: '13px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer' }}>NO</button>
+          </span>
+        )}
+      </div>
+
+      {/* Dealer filter bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderBottom: '1px solid #111', flexShrink: 0, background: '#080808' }}>
+        <span style={{ color: '#2a2a2a', fontSize: '11px', letterSpacing: '1px', marginRight: '2px' }}>FILTER</span>
+        {DEALERS.map(code => {
+          const isActive = filterDealer === code
+          const s = DEALER_INACTIVE[code]
+          return (
+            <button
+              key={code}
+              onClick={() => setFilterDealer(prev => prev === code ? null : code)}
+              style={{
+                background: isActive ? s.bg : 'transparent',
+                color: isActive ? s.color : '#2e2e2e',
+                border: `1px solid ${isActive ? s.border : '#1a1a1a'}`,
+                padding: '1px 7px',
+                fontSize: '11px',
+                fontFamily: 'Courier New, monospace',
+                borderRadius: '2px',
+                cursor: 'pointer',
+              }}
+            >
+              {code}
+            </button>
+          )
+        })}
+        {filterDealer && (
+          <button
+            onClick={() => setFilterDealer(null)}
+            style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '11px', cursor: 'pointer', fontFamily: 'Courier New, monospace', marginLeft: '2px' }}
+          >
+            × clear
+          </button>
+        )}
+        {filterDealer && (
+          <span style={{ color: '#444', fontSize: '11px', marginLeft: '6px' }}>
+            showing {filterDealer} only
           </span>
         )}
       </div>
@@ -1259,8 +1309,11 @@ export default function BackendPage() {
                 </tr>
                 {tranches.filter(t => {
                   const p = prices[`${s.series_number}:${t.tranche_name}`]
+                  if (filterDealer) {
+                    return p?.bid_dealer === filterDealer || p?.ask_dealer === filterDealer
+                  }
                   const hasPrice = p?.bid != null || p?.ask != null
-                  if (isCollapsed) return hasPrice  // collapsed = only show priced rows
+                  if (isCollapsed) return hasPrice
                   return showEmptyRows ? true : hasPrice
                 }).map((t, tIdx) => {
                   const rowKey = `${s.series_number}:${t.tranche_name}`
@@ -1280,15 +1333,18 @@ export default function BackendPage() {
                   const ghostBid = price?.bid == null ? ghost?.bid : undefined
                   const ghostAsk = price?.ask == null ? ghost?.ask : undefined
                   const ghostMode = ghost?.mode
+                  // In filter mode, only show bid/ask if this dealer owns that side
+                  const showBid = !filterDealer || price?.bid_dealer === filterDealer
+                  const showAsk = !filterDealer || price?.ask_dealer === filterDealer
 
                   const bidCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
-                      {price?.bid != null ? (
+                      {showBid && price?.bid != null ? (
                         <>
                           <span style={{ color: '#ffffff' }}>{formatPx(price.bid, price.mode)}</span>
                           {bidTag && <span style={{ background: bidTag.bg, color: bidTag.color, fontSize: '10px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.bid_dealer}</span>}
                         </>
-                      ) : ghostBid != null ? (
+                      ) : showBid && ghostBid != null ? (
                         <span style={{ color: '#484848', fontStyle: 'italic' }}>{formatPx(ghostBid, ghostMode)}</span>
                       ) : (
                         <span style={{ color: '#2a2a2a' }}>—</span>
@@ -1298,12 +1354,12 @@ export default function BackendPage() {
 
                   const askCell = (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', justifyContent: 'center', width: '100%' }}>
-                      {price?.ask != null ? (
+                      {showAsk && price?.ask != null ? (
                         <>
                           <span style={{ color: '#ffffff' }}>{formatPx(price.ask, price.mode)}</span>
                           {askTag && <span style={{ background: askTag.bg, color: askTag.color, fontSize: '10px', padding: '0 3px', borderRadius: '2px', fontWeight: 600 }}>{price.ask_dealer}</span>}
                         </>
-                      ) : ghostAsk != null ? (
+                      ) : showAsk && ghostAsk != null ? (
                         <span style={{ color: '#484848', fontStyle: 'italic' }}>{formatPx(ghostAsk, ghostMode)}</span>
                       ) : (
                         <span style={{ color: '#2a2a2a' }}>—</span>
