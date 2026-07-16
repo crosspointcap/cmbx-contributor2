@@ -343,7 +343,7 @@ export default function BackendPage() {
   const [bulkText,      setBulkText]      = useState('')
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
-  const [bulkResult,    setBulkResult]    = useState<{ bids: number; asks: number } | null>(null)
+  const [bulkResult,    setBulkResult]    = useState<{ bids: number; asks: number; changes: { label: string; side: string; from: string; to: string }[] } | null>(null)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
   const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
   const [showSettings, setShowSettings] = useState(false)
@@ -835,9 +835,11 @@ export default function BackendPage() {
     setBulkResult(null)
     const dealer = selectedDealer
     let postedBids = 0, postedAsks = 0
+    const changes: { label: string; side: string; from: string; to: string }[] = []
     try {
       for (const r of parsedBulk) {
         const sz = bulkSize.trim() || String(DEFAULT_SIZE[r.tranche] ?? 5)
+        const existing = prices[`${r.series}:${r.tranche}`]
         const upsertRow: Record<string, unknown> = {
           series_number: r.series, tranche_name: r.tranche, mode: r.mode,
         }
@@ -845,8 +847,15 @@ export default function BackendPage() {
         if (r.ask != null) { upsertRow.ask = r.ask; upsertRow.ask_dealer = dealer; upsertRow.ask_size = sz }
         const { error: priceErr } = await supabase.from('prices').upsert(upsertRow, { onConflict: 'series_number,tranche_name' })
         if (!priceErr) {
-          if (r.bid != null) postedBids++
-          if (r.ask != null) postedAsks++
+          const label = `${r.tranche}.${r.series}`
+          if (r.bid != null) {
+            postedBids++
+            changes.push({ label, side: 'bid', from: existing?.bid != null ? formatPx(existing.bid, existing.mode) : '—', to: formatPx(r.bid, r.mode) })
+          }
+          if (r.ask != null) {
+            postedAsks++
+            changes.push({ label, side: 'ask', from: existing?.ask != null ? formatPx(existing.ask, existing.mode) : '—', to: formatPx(r.ask, r.mode) })
+          }
         } else {
           console.warn('[bulk upsert]', priceErr.message)
         }
@@ -873,7 +882,7 @@ export default function BackendPage() {
         }
       }
       priceRefreshRef.current?.send({ type: 'broadcast', event: 'price-saved', payload: {} })
-      setBulkResult({ bids: postedBids, asks: postedAsks })
+      setBulkResult({ bids: postedBids, asks: postedAsks, changes })
       setBulkText('')
     } finally {
       setBulkSubmitting(false)
@@ -1501,8 +1510,23 @@ export default function BackendPage() {
 
             {/* Post-submit result */}
             {bulkResult && (
-              <div style={{ marginTop: '10px', color: '#66ff88', fontSize: '13px', fontWeight: 700 }}>
-                ✓ {bulkResult.bids} bids, {bulkResult.asks} offers posted
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ color: '#66ff88', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
+                  ✓ {bulkResult.bids} bids, {bulkResult.asks} offers posted
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <tbody>
+                    {bulkResult.changes.map((c, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #141414' }}>
+                        <td style={{ padding: '2px 8px', color: '#888' }}>{c.label}</td>
+                        <td style={{ padding: '2px 8px', color: '#555', width: '36px' }}>{c.side}</td>
+                        <td style={{ padding: '2px 8px', color: '#666', textAlign: 'right', fontWeight: 700 }}>{c.from}</td>
+                        <td style={{ padding: '2px 6px', color: '#444', textAlign: 'center' }}>→</td>
+                        <td style={{ padding: '2px 8px', color: '#66ff88', textAlign: 'left', fontWeight: 700 }}>{c.to}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 
