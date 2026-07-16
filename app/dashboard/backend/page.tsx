@@ -346,6 +346,7 @@ export default function BackendPage() {
   const [bulkResult,    setBulkResult]    = useState<{ bids: number; asks: number; changes: { label: string; side: string; from: string; to: string }[] } | null>(null)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
   const [filterDealer, setFilterDealer] = useState<string | null>(null)
+  const [filterCopyFlash, setFilterCopyFlash] = useState(false)
   const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
   const [showSettings, setShowSettings] = useState(false)
   const [rtOk,         setRtOk]         = useState(true)
@@ -1263,6 +1264,47 @@ export default function BackendPage() {
           <span style={{ color: '#444', fontSize: '11px', marginLeft: '6px' }}>
             showing {filterDealer} only
           </span>
+        )}
+        {filterDealer && (
+          <button
+            onClick={() => {
+              const now = new Date()
+              const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
+              const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/New_York' })
+              const lines: string[] = [`CMBX MARKETS — ${dateStr}  ${timeStr} ET`, '']
+              for (const s of series) {
+                for (const t of tranches) {
+                  const key = `${s.series_number}:${t.tranche_name}`
+                  const price = prices[key]
+                  if (!price) continue
+                  const hasBid = price.bid_dealer === filterDealer && price.bid != null
+                  const hasAsk = price.ask_dealer === filterDealer && price.ask != null
+                  if (!hasBid && !hasAsk) continue
+                  const bid = hasBid ? formatPx(price.bid, price.mode) : '—'
+                  const ask = hasAsk ? formatPx(price.ask, price.mode) : '—'
+                  const tranche = `${t.tranche_name}.${s.series_number}`
+                  lines.push(`${tranche.padEnd(12)}${bid.padStart(8)} / ${ask.padStart(7)}`)
+                }
+              }
+              navigator.clipboard.writeText(lines.join('\n'))
+              setFilterCopyFlash(true)
+              setTimeout(() => setFilterCopyFlash(false), 1200)
+            }}
+            style={{
+              marginLeft: '8px',
+              background: filterCopyFlash ? '#1a3a1a' : 'transparent',
+              color: filterCopyFlash ? '#44ff44' : '#555',
+              border: `1px solid ${filterCopyFlash ? '#44ff44' : '#2a2a2a'}`,
+              padding: '1px 10px',
+              fontSize: '11px',
+              fontFamily: 'Courier New, monospace',
+              borderRadius: '2px',
+              cursor: 'pointer',
+              letterSpacing: '1px',
+            }}
+          >
+            {filterCopyFlash ? 'COPIED ✓' : 'COPY'}
+          </button>
         )}
       </div>
 
