@@ -1373,7 +1373,7 @@ export default function BackendPage() {
                   const isOdd = tIdx % 2 === 1
 
                   const isRowHovered = hoveredCell?.key === rowKey
-                  let rowBg = isActive ? '#1a1500' : isRowHovered ? '#141008' : isOdd ? '#0d0d0d' : 'transparent'
+                  let rowBg = isActive ? '#1a1500' : isRowHovered ? '#2a1e00' : isOdd ? '#0d0d0d' : 'transparent'
                   if (flash === 'red') rowBg = '#3a0000'
                   if (flash === 'green') rowBg = '#003a00'
 
