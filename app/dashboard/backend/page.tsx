@@ -994,11 +994,11 @@ export default function BackendPage() {
     const rawVal = field === 'bid' ? price?.bid : field === 'ask' ? price?.ask : field === 'bid_size' ? price?.bid_size : price?.ask_size
     const isEmpty = rawVal == null
 
-    const cellBg = isEditing ? '#1a1a00' : isHovered ? '#141408' : 'transparent'
+    const cellBg = isEditing ? '#1a1a00' : 'transparent'
     const cellBorder = isEditing
       ? '1px solid #f0c040'
       : isHovered
-      ? '1px solid #555500'
+      ? '1px solid #554400'
       : '1px solid transparent'
 
     return (
@@ -1372,7 +1372,8 @@ export default function BackendPage() {
                   const flash = flashRows[rowKey]
                   const isOdd = tIdx % 2 === 1
 
-                  let rowBg = isActive ? '#1a1500' : isOdd ? '#0d0d0d' : 'transparent'
+                  const isRowHovered = hoveredCell?.key === rowKey
+                  let rowBg = isActive ? '#1a1500' : isRowHovered ? '#141008' : isOdd ? '#0d0d0d' : 'transparent'
                   if (flash === 'red') rowBg = '#3a0000'
                   if (flash === 'green') rowBg = '#003a00'
 
