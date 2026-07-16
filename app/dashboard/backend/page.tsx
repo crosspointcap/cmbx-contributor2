@@ -1515,7 +1515,7 @@ export default function BackendPage() {
               value={bulkText}
               onChange={e => { setBulkText(e.target.value); setBulkResult(null) }}
               rows={8}
-              placeholder={'92-16/ -18\n86-12/ -15\n78/ -13\n68/65 t17\n70-16/ bb14\n59-08/ bb13\n87-00/ bb19'}
+              placeholder=""
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: '#080808', color: '#ccc',
