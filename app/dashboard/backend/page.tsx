@@ -254,34 +254,58 @@ function _parsePriceTok(tok: string): { bid: number | null; ask: number | null; 
   return { bid, ask, mode }
 }
 
-function parseBulkLines(text: string): Array<{ series: string; bid: number | null; ask: number | null; mode: string }> {
-  const results: Array<{ series: string; bid: number | null; ask: number | null; mode: string }> = []
+function detectTrancheAndSeries(tok: string): { tranche: string; series: number } | null {
+  // Plain number (19) or dash-only (-19): BBB-
+  let m = tok.match(/^-?(\d+)$/)
+  if (m) return { tranche: 'BBB-', series: parseInt(m[1], 10) }
+  // Bloomberg -.19: BBB-
+  m = tok.match(/^-\.(\d+)$/)
+  if (m) return { tranche: 'BBB-', series: parseInt(m[1], 10) }
+  // t17 / T17: AAA (top)
+  m = tok.match(/^[tT](\d+)$/)
+  if (m) return { tranche: 'AAA', series: parseInt(m[1], 10) }
+  // aaa17: AAA
+  m = tok.match(/^aaa(\d+)$/i)
+  if (m) return { tranche: 'AAA', series: parseInt(m[1], 10) }
+  // as17: AS
+  m = tok.match(/^as(\d+)$/i)
+  if (m) return { tranche: 'AS', series: parseInt(m[1], 10) }
+  // aa17: AA
+  m = tok.match(/^aa(\d+)$/i)
+  if (m) return { tranche: 'AA', series: parseInt(m[1], 10) }
+  // a17 (single a): A
+  m = tok.match(/^a(\d+)$/i)
+  if (m) return { tranche: 'A', series: parseInt(m[1], 10) }
+  // bbb-17 or bbb17: BBB-
+  m = tok.match(/^bbb-?(\d+)$/i)
+  if (m) return { tranche: 'BBB-', series: parseInt(m[1], 10) }
+  // bb17: BB
+  m = tok.match(/^bb(\d+)$/i)
+  if (m) return { tranche: 'BB', series: parseInt(m[1], 10) }
+  return null
+}
+
+function parseBulkLines(text: string): Array<{ series: string; tranche: string; bid: number | null; ask: number | null; mode: string }> {
+  const results: Array<{ series: string; tranche: string; bid: number | null; ask: number | null; mode: string }> = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (!line) continue
     const tokens = line.match(/\S+/g) || []
     const priceToks: string[] = []
-    const seriesNums: number[] = []
+    const trancheTokens: { tranche: string; series: number }[] = []
     for (const tok of tokens) {
       if (tok.includes('/')) {
         priceToks.push(tok)
       } else {
-        // Accept: 19, -19, t19, T19, as19, aaa19, bbb-19, bb19, etc.
-        const m = tok.match(/^-?(\d+)$/)
-               || tok.match(/^-\.(\d+)$/)                 // Bloomberg BBB- format: -.19 → series 19
-               || tok.match(/^[tT](\d+)$/)
-               || tok.match(/^[a-zA-Z][a-zA-Z-]*(\d+)$/)  // tranche-prefixed e.g. as19, bbb-15
-        if (m) {
-          const n = parseInt(m[1], 10)
-          if (n > 0) seriesNums.push(n)
-        }
+        const ts = detectTrancheAndSeries(tok)
+        if (ts && ts.series > 0) trancheTokens.push(ts)
       }
     }
-    if (priceToks.length === 0 || seriesNums.length === 0) continue
-    const count = Math.min(priceToks.length, seriesNums.length)
+    if (priceToks.length === 0 || trancheTokens.length === 0) continue
+    const count = Math.min(priceToks.length, trancheTokens.length)
     for (let i = 0; i < count; i++) {
       const px = _parsePriceTok(priceToks[i])
-      if (px) results.push({ series: String(seriesNums[i]), ...px })
+      if (px) results.push({ series: String(trancheTokens[i].series), tranche: trancheTokens[i].tranche, ...px })
     }
   }
   return results
@@ -317,9 +341,9 @@ export default function BackendPage() {
   const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
   const [showBulkInput, setShowBulkInput] = useState(false)
   const [bulkText,      setBulkText]      = useState('')
-  const [bulkTranche,   setBulkTranche]   = useState('BBB-')
   const [bulkSize,      setBulkSize]      = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
+  const [bulkResult,    setBulkResult]    = useState<{ bids: number; asks: number } | null>(null)
   const [ghostPrices,  setGhostPrices]  = useState<GhostMap>({})
   const [theme,        setTheme]        = useState<Theme>(DEFAULT_THEME)
   const [showSettings, setShowSettings] = useState(false)
@@ -808,21 +832,28 @@ export default function BackendPage() {
   async function submitBulkPrices() {
     if (!selectedDealer) { showError('Select a dealer first'); return }
     setBulkSubmitting(true)
+    setBulkResult(null)
     const dealer = selectedDealer
-    const sz = bulkSize.trim() || String(DEFAULT_SIZE[bulkTranche] ?? 5)
+    let postedBids = 0, postedAsks = 0
     try {
       for (const r of parsedBulk) {
-        // Only write the sides that are actually present (supports one-sided quotes)
+        const sz = bulkSize.trim() || String(DEFAULT_SIZE[r.tranche] ?? 5)
         const upsertRow: Record<string, unknown> = {
-          series_number: r.series, tranche_name: bulkTranche, mode: r.mode,
+          series_number: r.series, tranche_name: r.tranche, mode: r.mode,
         }
         if (r.bid != null) { upsertRow.bid = r.bid; upsertRow.bid_dealer = dealer; upsertRow.bid_size = sz }
         if (r.ask != null) { upsertRow.ask = r.ask; upsertRow.ask_dealer = dealer; upsertRow.ask_size = sz }
         const { error: priceErr } = await supabase.from('prices').upsert(upsertRow, { onConflict: 'series_number,tranche_name' })
-        if (priceErr) console.warn('[bulk upsert]', priceErr.message)
+        if (!priceErr) {
+          if (r.bid != null) postedBids++
+          if (r.ask != null) postedAsks++
+        } else {
+          console.warn('[bulk upsert]', priceErr.message)
+        }
         const auditRows: object[] = []
-        if (r.bid != null) auditRows.push({ series_number: r.series, tranche_name: bulkTranche, dealer, side: 'bid', price: r.bid, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
-        if (r.ask != null) auditRows.push({ series_number: r.series, tranche_name: bulkTranche, dealer, side: 'ask', price: r.ask, size: sz, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        const sz2 = bulkSize.trim() || String(DEFAULT_SIZE[r.tranche] ?? 5)
+        if (r.bid != null) auditRows.push({ series_number: r.series, tranche_name: r.tranche, dealer, side: 'bid', price: r.bid, size: sz2, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+        if (r.ask != null) auditRows.push({ series_number: r.series, tranche_name: r.tranche, dealer, side: 'ask', price: r.ask, size: sz2, mode: r.mode, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
         if (auditRows.length > 0) {
           const { error: auditErr } = await supabase.from('price_changes').insert(auditRows)
           if (auditErr) console.warn('[bulk price_changes]', auditErr.message)
@@ -832,7 +863,7 @@ export default function BackendPage() {
       if (dealer === 'MS' && latestCdxRef.current.hy != null) {
         const hy = latestCdxRef.current.hy
         for (const r of parsedBulk) {
-          msSnapshotsRef.current[`${r.series}:${bulkTranche}`] = {
+          msSnapshotsRef.current[`${r.series}:${r.tranche}`] = {
             cdxHyAtEntry:   hy,
             bidAtEntry:     r.bid,
             askAtEntry:     r.ask,
@@ -841,11 +872,8 @@ export default function BackendPage() {
           }
         }
       }
-
-      // Push refresh signal to all dealer market pages after bulk submit
       priceRefreshRef.current?.send({ type: 'broadcast', event: 'price-saved', payload: {} })
-
-      setShowBulkInput(false)
+      setBulkResult({ bids: postedBids, asks: postedAsks })
       setBulkText('')
     } finally {
       setBulkSubmitting(false)
@@ -1406,39 +1434,23 @@ export default function BackendPage() {
                 DEALER: <span style={{ color: selectedDealer ? '#f0c040' : '#ff4444', fontWeight: 700 }}>{selectedDealer ?? 'NONE SELECTED'}</span>
               </span>
               <span style={{ color: '#888', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                TRANCHE:
-                <select
-                  value={bulkTranche}
-                  onChange={e => setBulkTranche(e.target.value)}
-                  style={{ background: '#111', color: '#f0c040', border: '1px solid #444', fontFamily: 'Courier New, monospace', fontSize: '13px', padding: '1px 4px', cursor: 'pointer', outline: 'none' }}
-                >
-                  {['AAA', 'AS', 'AA', 'A', 'BBB-', 'BB'].map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </span>
-              <span style={{ color: '#888', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                SIZE:
+                SIZE OVERRIDE:
                 <input
                   value={bulkSize}
                   onChange={e => setBulkSize(e.target.value)}
-                  placeholder={String(DEFAULT_SIZE[bulkTranche] ?? 5)}
+                  placeholder="auto"
                   style={{ background: '#111', color: '#ccc', border: '1px solid #333', fontFamily: 'Courier New, monospace', fontSize: '13px', padding: '1px 6px', width: '60px', outline: 'none' }}
                 />
               </span>
-            </div>
-
-            {/* Format hint */}
-            <div style={{ color: '#444', fontSize: '11px', marginBottom: '8px', lineHeight: '1.5' }}>
-              One line per series — <span style={{ color: '#666' }}>SERIES BID/ASK</span><br />
-              e.g. <span style={{ color: '#888' }}>-19 92-12/93-00</span> &nbsp;·&nbsp; <span style={{ color: '#888' }}>-14 285/295</span> &nbsp;·&nbsp; <span style={{ color: '#888' }}>-13 $83.50/$84.50</span>
             </div>
 
             {/* Textarea */}
             <textarea
               autoFocus
               value={bulkText}
-              onChange={e => setBulkText(e.target.value)}
+              onChange={e => { setBulkText(e.target.value); setBulkResult(null) }}
               rows={8}
-              placeholder={'as19 69/49\nas18 63/53\n— or —\n84-24/85-24 -15\n83-00/84-00 -14'}
+              placeholder={'92-16/ -18\n86-12/ -15\n78/ -13\n68/65 t17\n70-16/ bb14\n59-08/ bb13\n87-00/ bb19'}
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: '#080808', color: '#ccc',
@@ -1448,24 +1460,31 @@ export default function BackendPage() {
               }}
             />
 
+            {/* Counts */}
+            {bulkText.trim() && (
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', display: 'flex', gap: '16px' }}>
+                <span>{bulkText.split('\n').filter(l => l.trim()).length} tranches detected</span>
+                <span style={{ color: parsedBulk.length > 0 ? '#aaa' : '#555' }}>
+                  {parsedBulk.filter(r => r.bid != null).length} bids, {parsedBulk.filter(r => r.ask != null).length} offers parsed
+                </span>
+              </div>
+            )}
+
             {/* Live parse preview */}
             {parsedBulk.length > 0 && (
-              <div style={{ marginTop: '12px', border: '1px solid #1e1e1e', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ background: '#0c0c0c', padding: '4px 10px', borderBottom: '1px solid #1e1e1e', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '1px' }}>PREVIEW</span>
-                  <span style={{ color: '#555', fontSize: '11px' }}>{parsedBulk.length} rows · {bulkTranche} · {selectedDealer ?? '?'}</span>
+              <div style={{ marginTop: '10px', border: '1px solid #1e1e1e', borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{ background: '#0c0c0c', padding: '4px 10px', borderBottom: '1px solid #1e1e1e' }}>
+                  <span style={{ color: '#f0c040', fontSize: '11px', letterSpacing: '1px' }}>PREVIEW — {selectedDealer ?? '?'}</span>
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <tbody>
                     {parsedBulk.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 === 0 ? '#0a0a0a' : '#0d0d0d', borderBottom: '1px solid #141414' }}>
-                        <td style={{ padding: '3px 10px', color: '#888' }}>
-                          {`${bulkTranche}.${r.series}`}
-                        </td>
+                        <td style={{ padding: '3px 10px', color: '#888' }}>{`${r.tranche}.${r.series}`}</td>
                         <td style={{ padding: '3px 10px', color: '#66ff88', textAlign: 'center', fontWeight: 700 }}>{formatPx(r.bid, r.mode)}</td>
                         <td style={{ padding: '3px 4px', color: '#444', textAlign: 'center' }}>/</td>
                         <td style={{ padding: '3px 10px', color: '#ff8888', textAlign: 'center', fontWeight: 700 }}>{formatPx(r.ask, r.mode)}</td>
-                        <td style={{ padding: '3px 10px', color: '#555', textAlign: 'right', fontSize: '11px' }}>{bulkSize.trim() || String(DEFAULT_SIZE[bulkTranche] ?? 5)}MM</td>
+                        <td style={{ padding: '3px 10px', color: '#555', textAlign: 'right', fontSize: '11px' }}>{bulkSize.trim() || String(DEFAULT_SIZE[r.tranche] ?? 5)}MM</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1476,7 +1495,14 @@ export default function BackendPage() {
             {/* Parse errors hint */}
             {bulkText.trim() && parsedBulk.length === 0 && (
               <div style={{ marginTop: '10px', color: '#ff4444', fontSize: '12px' }}>
-                No valid lines found. Format: BID/ASK SERIES or TRANCHE+SERIES BID/ASK (e.g. "as19 69/49" or "84-24/85-24 -15")
+                No valid lines found — paste Kamil's message exactly as received.
+              </div>
+            )}
+
+            {/* Post-submit result */}
+            {bulkResult && (
+              <div style={{ marginTop: '10px', color: '#66ff88', fontSize: '13px', fontWeight: 700 }}>
+                ✓ {bulkResult.bids} bids, {bulkResult.asks} offers posted
               </div>
             )}
 
@@ -1494,10 +1520,10 @@ export default function BackendPage() {
                   fontWeight: 700,
                 }}
               >
-                {bulkSubmitting ? 'SUBMITTING...' : `SUBMIT ${parsedBulk.length} PRICE${parsedBulk.length !== 1 ? 'S' : ''}`}
+                {bulkSubmitting ? 'SUBMITTING...' : `SUBMIT ${parsedBulk.length > 0 ? `— ${parsedBulk.filter(r=>r.bid!=null).length} bids, ${parsedBulk.filter(r=>r.ask!=null).length} offers` : ''}`}
               </button>
               <button
-                onClick={() => { setShowBulkInput(false); setBulkText('') }}
+                onClick={() => { setShowBulkInput(false); setBulkText(''); setBulkResult(null) }}
                 style={{ background: 'transparent', color: '#555', border: '1px solid #2a2a2a', padding: '5px 16px', fontSize: '15px', fontFamily: 'Courier New, monospace', borderRadius: '2px', cursor: 'pointer' }}
               >
                 CANCEL
