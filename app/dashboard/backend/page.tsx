@@ -642,19 +642,22 @@ export default function BackendPage() {
                         null
 
     // ── Market protection: a different dealer cannot post a worse price ─────────
-    // Bid: higher is better — block if new bid < existing bid from another dealer
-    // Ask: lower is better — block if new ask > existing ask from another dealer
+    // Ticks (price): better bid = higher, better offer = lower
+    // Spread (yield): better bid = lower (tighter = higher price), better offer = higher (wider = lower price)
     if (numericValue != null) {
+      const isSpreadMode = mode === 'spread' || existing?.mode === 'spread'
       if (field === 'bid' && existing?.bid != null && existing.bid_dealer && existing.bid_dealer !== dealer) {
-        if (numericValue < existing.bid) {
-          showError(`${existing.bid_dealer} bid ${formatPx(existing.bid, existing.mode)} — ${dealer ?? 'you'} can't post a lower bid`)
+        const worse = isSpreadMode ? numericValue > existing.bid : numericValue < existing.bid
+        if (worse) {
+          showError(`${existing.bid_dealer} bid ${formatPx(existing.bid, existing.mode)} — ${dealer ?? 'you'} can't post a worse bid`)
           setEditingCell(null)
           return
         }
       }
       if (field === 'ask' && existing?.ask != null && existing.ask_dealer && existing.ask_dealer !== dealer) {
-        if (numericValue > existing.ask) {
-          showError(`${existing.ask_dealer} offer ${formatPx(existing.ask, existing.mode)} — ${dealer ?? 'you'} can't post a higher offer`)
+        const worse = isSpreadMode ? numericValue < existing.ask : numericValue > existing.ask
+        if (worse) {
+          showError(`${existing.ask_dealer} offer ${formatPx(existing.ask, existing.mode)} — ${dealer ?? 'you'} can't post a worse offer`)
           setEditingCell(null)
           return
         }
@@ -842,12 +845,17 @@ export default function BackendPage() {
         const sz = bulkSize.trim() || String(DEFAULT_SIZE[r.tranche] ?? 5)
         const existing = prices[`${r.series}:${r.tranche}`]
         // Best-bid / best-offer guard: a different dealer can only replace an
-        // existing price if their price is strictly better (higher bid, lower ask).
+        // existing price if their price is strictly better.
+        // Ticks: better bid = higher, better offer = lower
+        // Spread: better bid = lower (tighter spread), better offer = higher (wider spread)
+        const isSpreadMode = r.mode === 'spread' || existing?.mode === 'spread'
         const canPostBid = r.bid != null && (
-          existing?.bid == null || existing.bid_dealer === dealer || r.bid > existing.bid
+          existing?.bid == null || existing.bid_dealer === dealer ||
+          (isSpreadMode ? r.bid < existing.bid : r.bid > existing.bid)
         )
         const canPostAsk = r.ask != null && (
-          existing?.ask == null || existing.ask_dealer === dealer || r.ask < existing.ask
+          existing?.ask == null || existing.ask_dealer === dealer ||
+          (isSpreadMode ? r.ask > existing.ask : r.ask < existing.ask)
         )
         const upsertRow: Record<string, unknown> = {
           series_number: r.series, tranche_name: r.tranche, mode: r.mode,
