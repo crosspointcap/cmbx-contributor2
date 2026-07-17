@@ -264,23 +264,23 @@ function detectTrancheAndSeries(tok: string): { tranche: string; series: number 
   // t17 / T17: AAA (top)
   m = tok.match(/^[tT](\d+)$/)
   if (m) return { tranche: 'AAA', series: parseInt(m[1], 10) }
-  // aaa17: AAA
-  m = tok.match(/^aaa(\d+)$/i)
+  // aaa17 or AAA.17: AAA
+  m = tok.match(/^aaa\.?(\d+)$/i)
   if (m) return { tranche: 'AAA', series: parseInt(m[1], 10) }
-  // as17: AS
-  m = tok.match(/^as(\d+)$/i)
+  // as17 or AS.17: AS
+  m = tok.match(/^as\.?(\d+)$/i)
   if (m) return { tranche: 'AS', series: parseInt(m[1], 10) }
-  // aa17: AA
-  m = tok.match(/^aa(\d+)$/i)
+  // aa17 or AA.17: AA
+  m = tok.match(/^aa\.?(\d+)$/i)
   if (m) return { tranche: 'AA', series: parseInt(m[1], 10) }
-  // a17 (single a): A
-  m = tok.match(/^a(\d+)$/i)
+  // a17 or A.17 (single a): A
+  m = tok.match(/^a\.?(\d+)$/i)
   if (m) return { tranche: 'A', series: parseInt(m[1], 10) }
-  // bbb-17 or bbb17: BBB-
-  m = tok.match(/^bbb-?(\d+)$/i)
+  // bbb-17, bbb17, BBB-.17, BBB.17: BBB-
+  m = tok.match(/^bbb-?\.?(\d+)$/i)
   if (m) return { tranche: 'BBB-', series: parseInt(m[1], 10) }
-  // bb17: BB
-  m = tok.match(/^bb(\d+)$/i)
+  // bb17 or BB.17: BB
+  m = tok.match(/^bb\.?(\d+)$/i)
   if (m) return { tranche: 'BB', series: parseInt(m[1], 10) }
   return null
 }
