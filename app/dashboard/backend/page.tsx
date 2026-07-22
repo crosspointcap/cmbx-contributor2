@@ -639,7 +639,7 @@ export default function BackendPage() {
       stripped === '' ? null :
       is32nds         ? parse32nds(stripped) :
       isDollar        ? (() => { const f = parseFloat(stripped); if (isNaN(f)) return null; const whole = Math.floor(f); const ticks = Math.round((f - whole) * 32); return whole + ticks / 32 })() :
-      isSpread        ? (() => { const f = parseFloat(stripped); return isNaN(f) ? null : Math.round(f) })() :
+      isSpread        ? (() => { const f = parseFloat(stripped); return isNaN(f) ? null : Math.round(f * 10) / 10 })() :
                         null
 
     // ── Market protection: a different dealer cannot post a worse price ─────────
@@ -1013,7 +1013,7 @@ export default function BackendPage() {
           setEditingCell({ key, field })
           // Pre-populate in the correct display format
           if (rawVal != null && (field === 'bid' || field === 'ask')) {
-            setEditValue(price?.mode === 'spread' ? String(Math.round(rawVal as number)) : fmt32nds(rawVal as number))
+            setEditValue(price?.mode === 'spread' ? formatPx(rawVal as number, 'spread') : fmt32nds(rawVal as number))
           } else {
             setEditValue(rawVal != null ? String(rawVal) : '')
           }
