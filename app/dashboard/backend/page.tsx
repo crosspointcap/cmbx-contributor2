@@ -639,7 +639,7 @@ export default function BackendPage() {
       stripped === '' ? null :
       is32nds         ? parse32nds(stripped) :
       isDollar        ? (() => { const f = parseFloat(stripped); if (isNaN(f)) return null; const whole = Math.floor(f); const ticks = Math.round((f - whole) * 32); return whole + ticks / 32 })() :
-      isSpread        ? (() => { const f = parseFloat(stripped); return isNaN(f) ? null : Math.round(f * 10) / 10 })() :
+      isSpread        ? (() => { const f = parseFloat(stripped); return isNaN(f) ? null : f })() :
                         null
 
     // ── Market protection: a different dealer cannot post a worse price ─────────
