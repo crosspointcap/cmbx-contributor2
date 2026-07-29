@@ -323,6 +323,7 @@ export default function BackendPage() {
   const [editingCell, setEditingCell] = useState<{ key: string; field: EditField } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [flashRows, setFlashRows] = useState<Record<string, 'red' | 'green'>>({})
+  const [flashSides, setFlashSides] = useState<Record<string, 'bid' | 'ask' | 'row'>>({})
   const [hitShake, setHitShake] = useState(false)
   const [liftShake, setLiftShake] = useState(false)
   const [cellError, setCellError] = useState('')
@@ -465,7 +466,7 @@ export default function BackendPage() {
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const entry = mapTrade(payload.new)
-        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green', 30000)
+        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green', 30000, entry.action === 'HIT' ? 'bid' : 'ask')
         setTradeLog(entry)
         setBlotterTrades(prev => [entry, ...prev])
       })
@@ -591,12 +592,13 @@ export default function BackendPage() {
     }
   }, [authChecked])
 
-  function flashRowEffect(key: string, color: 'red' | 'green', durationMs = 3000) {
-    // Clear any existing timer for this row before starting a new one
+  function flashRowEffect(key: string, color: 'red' | 'green', durationMs = 3000, side: 'bid' | 'ask' | 'row' = 'row') {
     if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
     setFlashRows(prev => ({ ...prev, [key]: color }))
+    setFlashSides(prev => ({ ...prev, [key]: side }))
     flashTimers.current[key] = setTimeout(() => {
       setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
+      setFlashSides(prev => { const n = { ...prev }; delete n[key]; return n })
       delete flashTimers.current[key]
     }, durationMs)
   }
@@ -984,17 +986,21 @@ export default function BackendPage() {
 
     await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
-    flashRowEffect(rowKey, isHit ? 'red' : 'green', 30000)
+    const clearFields = isHit
+      ? { bid: null, bid_dealer: null, bid_size: null }
+      : { ask: null, ask_dealer: null, ask_size: null }
+    await supabase.from('prices').update(clearFields).eq('series_number', seriesNum).eq('tranche_name', trancheName)
+    flashRowEffect(rowKey, isHit ? 'red' : 'green', 30000, isHit ? 'bid' : 'ask')
   }
 
-  function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties) {
+  function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties, flashBg?: string) {
     const isEditing = editingCell?.key === key && editingCell.field === field
     const isHovered = hoveredCell?.key === key && hoveredCell.field === field
     const price = prices[key]
     const rawVal = field === 'bid' ? price?.bid : field === 'ask' ? price?.ask : field === 'bid_size' ? price?.bid_size : price?.ask_size
     const isEmpty = rawVal == null
 
-    const cellBg = isEditing ? '#1a1a00' : 'transparent'
+    const cellBg = isEditing ? '#1a1a00' : flashBg ?? 'transparent'
     const cellBorder = isEditing
       ? '1px solid #f0c040'
       : isHovered
@@ -1370,12 +1376,13 @@ export default function BackendPage() {
                   const price = prices[rowKey]
                   const isActive = selectedRow === rowKey
                   const flash = flashRows[rowKey]
+                  const flashSide = flashSides[rowKey]
                   const isOdd = tIdx % 2 === 1
 
                   const isRowHovered = hoveredCell?.key === rowKey
                   let rowBg = isActive ? '#1a1500' : isRowHovered ? '#2a1e00' : isOdd ? '#0d0d0d' : 'transparent'
-                  if (flash === 'red') rowBg = '#3a0000'
-                  if (flash === 'green') rowBg = '#003a00'
+                  if (flash && flashSide === 'row' && flash === 'red') rowBg = '#3a0000'
+                  if (flash && flashSide === 'row' && flash === 'green') rowBg = '#003a00'
 
                   const ghost   = ghostPrices[rowKey]
                   const bidTag  = price?.bid_dealer && DEALER_INACTIVE[price.bid_dealer] ? DEALER_INACTIVE[price.bid_dealer] : null
@@ -1418,8 +1425,8 @@ export default function BackendPage() {
                     </span>
                   )
 
-                  const bszCell = <span style={{ color: price?.bid_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.bid_size ?? '—'}</span>
-                  const aszCell = <span style={{ color: price?.ask_size != null ? '#aaaaaa' : '#2a2a2a' }}>{price?.ask_size ?? '—'}</span>
+                  const bszCell = <span style={{ color: price?.bid_size != null ? '#ffffff' : '#2a2a2a' }}>{price?.bid_size ?? '—'}</span>
+                  const aszCell = <span style={{ color: price?.ask_size != null ? '#ffffff' : '#2a2a2a' }}>{price?.ask_size ?? '—'}</span>
 
                   return (
                     <tr
@@ -1431,8 +1438,8 @@ export default function BackendPage() {
                         {`${t.tranche_name}.${s.series_number}`}
                       </td>
                       {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '1px 8px' })}
-                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #1a3a1a' })}
-                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #3a1a1a' })}
+                      {renderEditCell(rowKey, 'bid', bidCell, { textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #1a3a1a' }, flash && flashSide === 'bid' ? '#3a0000' : undefined)}
+                      {renderEditCell(rowKey, 'ask', askCell, { textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #3a1a1a' }, flash && flashSide === 'ask' ? '#003a00' : undefined)}
                       {renderEditCell(rowKey, 'ask_size', aszCell, { textAlign: 'center', padding: '1px 8px' })}
                       <td style={{ textAlign: 'right', padding: '1px 10px' }}>
                         {price?.last_trade_px != null ? (
