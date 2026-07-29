@@ -54,6 +54,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
+  const [accepted, setAccepted] = useState(false)
 
   // If already have a valid session today, skip login
   useEffect(() => {
@@ -113,7 +114,7 @@ export default function LoginPage() {
     boxSizing: 'border-box',
   }
 
-  const canSubmit = !loading && email.trim().length > 0 && password.length > 0
+  const canSubmit = !loading && email.trim().length > 0 && password.length > 0 && accepted
 
   return (
     <div style={{
@@ -222,6 +223,17 @@ export default function LoginPage() {
         fontFamily: 'Courier New, monospace',
       }}>
         <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={accepted}
+              onChange={e => setAccepted(e.target.checked)}
+              style={{ accentColor: '#f0c040', width: '13px', height: '13px', cursor: 'pointer', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: '9px', color: '#888', letterSpacing: '1px' }}>
+              I have read and agree to the terms below
+            </span>
+          </label>
           <div style={{ fontSize: '8px', color: '#888', letterSpacing: '2px', marginBottom: '8px', fontWeight: 700 }}>
             LEGAL DISCLAIMER &amp; TERMS OF ACCESS
           </div>
