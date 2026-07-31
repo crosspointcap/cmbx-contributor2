@@ -183,6 +183,18 @@ interface BlotterTrade {
   mode: string | null
 }
 
+interface PriceQueueEntry {
+  id: string
+  series_number: string
+  tranche_name: string
+  side: 'bid' | 'ask'
+  dealer: string
+  price: number
+  size: string
+  mode: string
+  created_at: string
+}
+
 
 const inputStyle: React.CSSProperties = {
   background: '#1a1a00',
@@ -338,6 +350,8 @@ export default function BackendPage() {
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
   const [confirmTrade,  setConfirmTrade]  = useState<BlotterTrade | null>(null)
+  const [priceQueue, setPriceQueue] = useState<PriceQueueEntry[]>([])
+  const [expandedQueueRows, setExpandedQueueRows] = useState<Set<string>>(new Set())
   const [confirmSpread, setConfirmSpread] = useState('')
   const [confirmClearBlotter, setConfirmClearBlotter] = useState(false)
   const [showBulkInput, setShowBulkInput] = useState(false)
@@ -474,6 +488,18 @@ export default function BackendPage() {
         const hb = payload.new as { bbg_connected?: boolean; active?: boolean }
         setAgentOnline(hb.bbg_connected ?? hb.active ?? false)
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_queue' }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          const old = payload.old as { id: string }
+          setPriceQueue(prev => prev.filter(e => e.id !== old.id))
+        } else {
+          const entry = payload.new as PriceQueueEntry
+          setPriceQueue(prev => {
+            const next = prev.filter(e => e.id !== entry.id)
+            return [...next, entry].sort((a, b) => a.created_at.localeCompare(b.created_at))
+          })
+        }
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cdx_intraday' }, (payload) => {
         const row = payload.new as { cdx_hy?: number | null; cdx_ig?: number | null }
         const hy = row.cdx_hy ?? null
@@ -535,12 +561,13 @@ export default function BackendPage() {
     }
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }] = await Promise.all([
+      const [{ data: sd }, { data: td }, { data: pd }, { data: hb }, { data: tr }, { data: qd }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
         supabase.from('agent_heartbeat').select('*').limit(1).single(),
         supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(200),
+        supabase.from('price_queue').select('*').order('created_at', { ascending: true }),
       ])
       if (cancelled) return
       if (sd) {
@@ -557,6 +584,7 @@ export default function BackendPage() {
         setGhostPrices(buildGhostMap(pd))
       }
       if (hb) { const h = hb as { bbg_connected?: boolean; active?: boolean }; setAgentOnline(h.bbg_connected ?? h.active ?? false) }
+      if (qd) setPriceQueue(qd as PriceQueueEntry[])
     }
 
     // Fetch SPX and CDX immediately, then refresh every 5 minutes
@@ -601,6 +629,49 @@ export default function BackendPage() {
       setFlashSides(prev => { const n = { ...prev }; delete n[key]; return n })
       delete flashTimers.current[key]
     }, durationMs)
+  }
+
+  function toggleQueueExpand(rowKey: string) {
+    setExpandedQueueRows(prev => {
+      const next = new Set(prev)
+      if (next.has(rowKey)) next.delete(rowKey) else next.add(rowKey)
+      return next
+    })
+  }
+
+  async function recomputePricesRow(seriesNum: string, trancheName: string, side: 'bid' | 'ask') {
+    const { data: entries } = await supabase
+      .from('price_queue').select('*')
+      .eq('series_number', seriesNum).eq('tranche_name', trancheName).eq('side', side)
+      .order('created_at', { ascending: true })
+
+    if (!entries || entries.length === 0) {
+      await supabase.from('prices').update(
+        side === 'bid'
+          ? { bid: null, bid_dealer: null, bid_size: null }
+          : { ask: null, ask_dealer: null, ask_size: null }
+      ).eq('series_number', seriesNum).eq('tranche_name', trancheName)
+      return
+    }
+
+    const mode = entries[0].mode ?? 'ticks'
+    const isSpread = mode === 'spread'
+    const priceArr = entries.map((e: PriceQueueEntry) => e.price)
+    const bestPrice = side === 'bid'
+      ? (isSpread ? Math.min(...priceArr) : Math.max(...priceArr))
+      : (isSpread ? Math.max(...priceArr) : Math.min(...priceArr))
+
+    const atBest = entries.filter((e: PriceQueueEntry) => e.price === bestPrice)
+    const totalSize = atBest.reduce((sum: number, e: PriceQueueEntry) => {
+      const n = parseFloat(e.size); return sum + (isNaN(n) ? 0 : n)
+    }, 0)
+
+    await supabase.from('prices').upsert({
+      series_number: seriesNum, tranche_name: trancheName, mode,
+      ...(side === 'bid'
+        ? { bid: bestPrice, bid_dealer: atBest[0].dealer, bid_size: String(totalSize) }
+        : { ask: bestPrice, ask_dealer: atBest[0].dealer, ask_size: String(totalSize) })
+    }, { onConflict: 'series_number,tranche_name' })
   }
 
   function handleDealerClick(code: string) {
@@ -667,21 +738,25 @@ export default function BackendPage() {
       }
     }
 
-    const update: Record<string, unknown> = {
-      series_number: seriesNum,
-      tranche_name:  trancheName,
-      mode,
-      [field]: numericValue,
-    }
-    if (field === 'bid') update.bid_dealer = numericValue != null ? (dealer ?? null) : null
-    if (field === 'ask') update.ask_dealer = numericValue != null ? (dealer ?? null) : null
-
-    // Clearing a price also clears its size; entering a price auto-fills size if empty
     const defSize = String(DEFAULT_SIZE[trancheName] ?? 5)
-    if (field === 'bid') update.bid_size = numericValue == null ? null : (existing?.bid_size ?? defSize)
-    if (field === 'ask') update.ask_size = numericValue == null ? null : (existing?.ask_size ?? defSize)
+    const entrySize = field === 'bid' ? (existing?.bid_size ?? defSize) : (existing?.ask_size ?? defSize)
 
-    await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
+    if (numericValue == null) {
+      if (dealer) {
+        await supabase.from('price_queue').delete()
+          .eq('series_number', seriesNum).eq('tranche_name', trancheName)
+          .eq('side', field).eq('dealer', dealer)
+      }
+      await recomputePricesRow(seriesNum, trancheName, field as 'bid' | 'ask')
+    } else {
+      if (dealer) {
+        await supabase.from('price_queue').upsert({
+          series_number: seriesNum, tranche_name: trancheName,
+          side: field, dealer, price: numericValue, size: entrySize, mode,
+        }, { onConflict: 'series_number,tranche_name,side,dealer' })
+      }
+      await recomputePricesRow(seriesNum, trancheName, field as 'bid' | 'ask')
+    }
 
     // Push refresh signal to all dealer market pages
     priceRefreshRef.current?.send({ type: 'broadcast', event: 'price-saved', payload: {} })
@@ -765,6 +840,7 @@ export default function BackendPage() {
   }
 
   async function clearAllPrices() {
+    await supabase.from('price_queue').delete().neq('id', '00000000-0000-0000-0000-000000000000')
     await supabase.from('prices').update({
       bid: null, ask: null,
       bid_size: null, ask_size: null,
@@ -772,9 +848,10 @@ export default function BackendPage() {
       last_trade_px: null, last_trade_time: null,
     }).neq('series_number', '')
     setPrices({})
+    setPriceQueue([])
     setGhostPrices({})
     setPulledPrices({})
-    msSnapshotsRef.current = {}  // clear all MS auto-adj snapshots
+    msSnapshotsRef.current = {}
     setTradeLog(null)
     setSelectedRow(null)
     setConfirmClear(false)
@@ -933,10 +1010,16 @@ export default function BackendPage() {
         ...(hasBid ? { bid: p.bid, bid_size: p.bid_size } : {}),
         ...(hasAsk ? { ask: p.ask, ask_size: p.ask_size } : {}),
       })
-      const update: Record<string, unknown> = { series_number, tranche_name }
-      if (hasBid) { update.bid = null; update.bid_dealer = null; update.bid_size = null }
-      if (hasAsk) { update.ask = null; update.ask_dealer = null; update.ask_size = null }
-      await supabase.from('prices').upsert(update, { onConflict: 'series_number,tranche_name' })
+      if (hasBid) {
+        await supabase.from('price_queue').delete()
+          .eq('series_number', series_number).eq('tranche_name', tranche_name).eq('side', 'bid').eq('dealer', code)
+        await recomputePricesRow(series_number, tranche_name, 'bid')
+      }
+      if (hasAsk) {
+        await supabase.from('price_queue').delete()
+          .eq('series_number', series_number).eq('tranche_name', tranche_name).eq('side', 'ask').eq('dealer', code)
+        await recomputePricesRow(series_number, tranche_name, 'ask')
+      }
     }
     if (snapshot.length > 0) {
       setPulledPrices(prev => {
@@ -978,18 +1061,35 @@ export default function BackendPage() {
 
     const [seriesNum, trancheName] = rowKey.split(':')
     const px            = isHit ? (prices[rowKey]?.bid ?? null)         : (prices[rowKey]?.ask ?? null)
-    const passiveDealer = isHit ? (prices[rowKey]?.bid_dealer ?? null)  : (prices[rowKey]?.ask_dealer ?? null)
     const sz            = isHit ? (prices[rowKey]?.bid_size ?? null)    : (prices[rowKey]?.ask_size ?? null)
 
-    if (px == null)            { shake(); showError(isHit ? 'No bid posted on this tranche' : 'No offer posted on this tranche'); return }
+    if (px == null) { shake(); showError(isHit ? 'No bid posted on this tranche' : 'No offer posted on this tranche'); return }
+
+    // FIFO: get the first queue entry at the best price; fall back to prices table dealer
+    const tradeSide = isHit ? 'bid' : 'ask'
+    const { data: queueEntries } = await supabase
+      .from('price_queue').select('*')
+      .eq('series_number', seriesNum).eq('tranche_name', trancheName).eq('side', tradeSide)
+      .order('created_at', { ascending: true })
+
+    const fifoEntry = (queueEntries ?? []).find((e: PriceQueueEntry) => e.price === px) ?? (queueEntries ?? [])[0] ?? null
+    const passiveDealer = fifoEntry?.dealer ?? (isHit ? (prices[rowKey]?.bid_dealer ?? null) : (prices[rowKey]?.ask_dealer ?? null))
+    const tradeSz = fifoEntry ? fifoEntry.size : sz
+
     if (dealer === passiveDealer) { shake(); showError(`${dealer} cannot ${isHit ? 'hit' : 'lift'} their own price`); return }
 
-    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: sz, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
+    await supabase.from('trades').insert({ series_number: seriesNum, tranche_name: trancheName, side, price: px, dealer, passive_dealer: passiveDealer, trade_size: tradeSz, spx_at_time: latestSpxRef.current, cdx_hy_at_time: latestCdxRef.current.hy, cdx_ig_at_time: latestCdxRef.current.ig })
     await supabase.from('prices').upsert({ series_number: seriesNum, tranche_name: trancheName, last_trade_px: px, last_trade_time: new Date().toISOString() }, { onConflict: 'series_number,tranche_name' })
-    const clearFields = isHit
-      ? { bid: null, bid_dealer: null, bid_size: null }
-      : { ask: null, ask_dealer: null, ask_size: null }
-    await supabase.from('prices').update(clearFields).eq('series_number', seriesNum).eq('tranche_name', trancheName)
+
+    if (fifoEntry) {
+      await supabase.from('price_queue').delete().eq('id', fifoEntry.id)
+      await recomputePricesRow(seriesNum, trancheName, tradeSide)
+    } else {
+      const clearFields = isHit
+        ? { bid: null, bid_dealer: null, bid_size: null }
+        : { ask: null, ask_dealer: null, ask_size: null }
+      await supabase.from('prices').update(clearFields).eq('series_number', seriesNum).eq('tranche_name', trancheName)
+    }
     flashRowEffect(rowKey, isHit ? 'red' : 'green', 30000, isHit ? 'bid' : 'ask')
   }
 
@@ -1378,6 +1478,10 @@ export default function BackendPage() {
                   const flash = flashRows[rowKey]
                   const flashSide = flashSides[rowKey]
                   const isOdd = tIdx % 2 === 1
+                  const rowQueueBid = priceQueue.filter(e => e.series_number === s.series_number && e.tranche_name === t.tranche_name && e.side === 'bid')
+                  const rowQueueAsk = priceQueue.filter(e => e.series_number === s.series_number && e.tranche_name === t.tranche_name && e.side === 'ask')
+                  const hasQueue = rowQueueBid.length > 1 || rowQueueAsk.length > 1
+                  const isQueueExpanded = expandedQueueRows.has(rowKey)
 
                   const isRowHovered = hoveredCell?.key === rowKey
                   let rowBg = isActive ? '#1a1500' : isRowHovered ? '#2a1e00' : isOdd ? '#0d0d0d' : 'transparent'
@@ -1429,12 +1533,16 @@ export default function BackendPage() {
                   const aszCell = <span style={{ color: price?.ask_size != null ? '#ffffff' : '#2a2a2a' }}>{price?.ask_size ?? '—'}</span>
 
                   return (
+                    <Fragment key={rowKey}>
                     <tr
-                      key={rowKey}
                       onClick={() => setSelectedRow(prev => prev === rowKey ? null : rowKey)}
                       style={{ background: rowBg, borderBottom: '1px solid #161616', cursor: 'pointer' }}
                     >
-                      <td style={{ padding: '1px 8px 1px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px', fontWeight: 700 }}>
+                      <td
+                        style={{ padding: '1px 8px 1px 12px', color: '#ffffff', whiteSpace: 'nowrap', width: '160px', fontWeight: 700 }}
+                        onClick={hasQueue ? (e) => { e.stopPropagation(); toggleQueueExpand(rowKey) } : undefined}
+                      >
+                        {hasQueue && <span style={{ color: '#f0c040', fontSize: '10px', marginRight: '4px' }}>{isQueueExpanded ? '▼' : '▶'}</span>}
                         {`${t.tranche_name}.${s.series_number}`}
                       </td>
                       {renderEditCell(rowKey, 'bid_size', bszCell, { textAlign: 'center', padding: '1px 8px' })}
@@ -1452,6 +1560,28 @@ export default function BackendPage() {
                         ) : <span style={{ color: '#2a2a2a' }}>—</span>}
                       </td>
                     </tr>
+                    {isQueueExpanded && rowQueueBid.length > 1 && rowQueueBid.map((entry, i) => (
+                      <tr key={`q-bid-${entry.id}`} style={{ background: '#060610', borderBottom: '1px solid #0f0f1a' }}>
+                        <td style={{ padding: '1px 8px 1px 28px', color: '#555', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                          #{i + 1} <span style={{ color: '#88aaff', fontWeight: 600 }}>{entry.dealer}</span>
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '1px 8px', color: '#666', fontSize: '11px' }}>{entry.size}</td>
+                        <td style={{ textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #0f2a0f', color: '#aaccaa', fontSize: '11px' }}>{formatPx(entry.price, entry.mode)}</td>
+                        <td colSpan={3} />
+                      </tr>
+                    ))}
+                    {isQueueExpanded && rowQueueAsk.length > 1 && rowQueueAsk.map((entry, i) => (
+                      <tr key={`q-ask-${entry.id}`} style={{ background: '#100606', borderBottom: '1px solid #1a0f0f' }}>
+                        <td style={{ padding: '1px 8px 1px 28px', color: '#555', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                          #{i + 1} <span style={{ color: '#ffaaaa', fontWeight: 600 }}>{entry.dealer}</span>
+                        </td>
+                        <td colSpan={2} />
+                        <td style={{ textAlign: 'center', padding: '1px 10px', borderLeft: '2px solid #2a0f0f', color: '#ccaaaa', fontSize: '11px' }}>{formatPx(entry.price, entry.mode)}</td>
+                        <td style={{ padding: '1px 8px', color: '#666', fontSize: '11px' }}>{entry.size}</td>
+                        <td />
+                      </tr>
+                    ))}
+                    </Fragment>
                   )
                 })}
               </Fragment>
