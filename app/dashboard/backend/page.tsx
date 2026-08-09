@@ -372,6 +372,85 @@ export default function BackendPage() {
     bid?: number | null; bid_size?: string | null
     ask?: number | null; ask_size?: string | null
   }>>>({})
+  const [showEodSummary, setShowEodSummary] = useState(false)
+  const [eodSummaryText, setEodSummaryText] = useState('')
+  const [eodSummaryCopied, setEodSummaryCopied] = useState(false)
+  const [eodSummaryLoading, setEodSummaryLoading] = useState(false)
+
+  async function generateEodSummary() {
+    setEodSummaryLoading(true)
+    setShowEodSummary(true)
+    setEodSummaryText('')
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const todayStart = `${today}T00:00:00.000Z`
+      const todayEnd   = `${today}T23:59:59.999Z`
+
+      const [{ data: trades }, { data: changes }] = await Promise.all([
+        supabase.from('trades').select('*').gte('created_at', todayStart).lte('created_at', todayEnd).order('created_at', { ascending: true }),
+        supabase.from('price_changes').select('*').gte('created_at', todayStart).lte('created_at', todayEnd).order('created_at', { ascending: true }),
+      ])
+
+      const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      const lines: string[] = []
+      lines.push(`CMBX EOD SUMMARY — ${dateStr}`)
+      lines.push('='.repeat(50))
+      lines.push('')
+
+      // Trades section
+      const tradeList = trades ?? []
+      if (tradeList.length === 0) {
+        lines.push('TRADES: None today.')
+      } else {
+        lines.push(`TRADES (${tradeList.length} total):`)
+        for (const t of tradeList) {
+          const time   = new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+          const action = t.side === 'bid' ? 'HIT' : 'LIFT'
+          const px     = t.price != null ? `${t.price} bps` : '—'
+          const sz     = t.size ?? t.trade_size ?? '?'
+          lines.push(`  ${time}  ${action}  CMBX.${t.series_number}.${t.tranche_name}  ${sz}MM @ ${px}`)
+        }
+      }
+      lines.push('')
+
+      // Level movement section — first vs last price per tranche
+      const changeList = changes ?? []
+      if (changeList.length > 0) {
+        // Group by series+tranche+side
+        const byKey: Record<string, { first: number; last: number; series: string; tranche: string; side: string }> = {}
+        for (const c of changeList) {
+          const key = `${c.series_number}|${c.tranche_name}|${c.side}`
+          const px  = Number(c.new_value)
+          if (isNaN(px)) continue
+          if (!byKey[key]) byKey[key] = { first: px, last: px, series: c.series_number, tranche: c.tranche_name, side: c.side }
+          byKey[key].last = px
+        }
+
+        const movements = Object.values(byKey).filter(v => v.first !== v.last)
+        if (movements.length > 0) {
+          lines.push('LEVEL MOVEMENTS:')
+          for (const m of movements) {
+            const diff  = Math.round((m.last - m.first) * 10) / 10
+            const dir   = diff > 0 ? 'widened' : 'tightened'
+            const absDiff = Math.abs(diff)
+            lines.push(`  CMBX.${m.series}.${m.tranche} ${m.side.toUpperCase()} ${dir} ${absDiff} bps  (${m.first} → ${m.last})`)
+          }
+        } else {
+          lines.push('LEVEL MOVEMENTS: Levels unchanged from open.')
+        }
+      } else {
+        lines.push('LEVEL MOVEMENTS: No price activity recorded today.')
+      }
+
+      lines.push('')
+      lines.push('— Crosspoint Capital')
+      setEodSummaryText(lines.join('\n'))
+    } catch (e) {
+      setEodSummaryText('Error generating summary. Please try again.')
+    } finally {
+      setEodSummaryLoading(false)
+    }
+  }
 
   function toggleCollapse(seriesNum: string) {
     setCollapsedSeries(prev => {
@@ -1605,6 +1684,12 @@ export default function BackendPage() {
               >
                 XLS
               </button>
+              <button
+                onClick={generateEodSummary}
+                style={{ background: '#0a0a1a', color: '#8888ff', border: '1px solid #333366', padding: '1px 7px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px' }}
+              >
+                EOD
+              </button>
               {!confirmClearBlotter ? (
                 <button
                   onClick={() => setConfirmClearBlotter(true)}
@@ -2074,6 +2159,43 @@ export default function BackendPage() {
           <span style={{ color: '#2a2a2a' }}>— no trades this session</span>
         )}
       </div>
+
+      {/* EOD Summary modal */}
+      {showEodSummary && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#0a0a0a', border: '1px solid #333', borderRadius: '4px', width: '600px', maxWidth: '90vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#8888ff', fontFamily: 'Courier New, monospace', fontSize: '13px', letterSpacing: '2px', fontWeight: 700 }}>EOD SUMMARY</span>
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(eodSummaryText)
+                    setEodSummaryCopied(true)
+                    setTimeout(() => setEodSummaryCopied(false), 2000)
+                  }}
+                  disabled={!eodSummaryText}
+                  style={{ background: eodSummaryText ? '#0a1a0a' : 'transparent', color: eodSummaryCopied ? '#f0c040' : '#66ff88', border: `1px solid ${eodSummaryText ? '#336633' : '#222'}`, padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: eodSummaryText ? 'pointer' : 'default', borderRadius: '2px', letterSpacing: '1px' }}
+                >
+                  {eodSummaryCopied ? 'COPIED ✓' : 'COPY'}
+                </button>
+                <button
+                  onClick={() => setShowEodSummary(false)}
+                  style={{ background: 'transparent', color: '#555', border: '1px solid #2a2a2a', padding: '2px 10px', fontSize: '11px', fontFamily: 'Courier New, monospace', cursor: 'pointer', borderRadius: '2px' }}
+                >
+                  CLOSE
+                </button>
+              </span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+              {eodSummaryLoading ? (
+                <div style={{ color: '#444', fontFamily: 'Courier New, monospace', fontSize: '13px' }}>Generating...</div>
+              ) : (
+                <pre style={{ margin: 0, color: '#ccc', fontFamily: 'Courier New, monospace', fontSize: '12px', lineHeight: '1.7', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{eodSummaryText}</pre>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
