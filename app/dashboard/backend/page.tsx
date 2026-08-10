@@ -420,7 +420,7 @@ export default function BackendPage() {
         const byKey: Record<string, { first: number; last: number; series: string; tranche: string; side: string }> = {}
         for (const c of changeList) {
           const key = `${c.series_number}|${c.tranche_name}|${c.side}`
-          const px  = Number(c.new_value)
+          const px  = Number(c.price)
           if (isNaN(px)) continue
           if (!byKey[key]) byKey[key] = { first: px, last: px, series: c.series_number, tranche: c.tranche_name, side: c.side }
           byKey[key].last = px
