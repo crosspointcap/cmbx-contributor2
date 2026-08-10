@@ -860,8 +860,8 @@ export default function BackendPage() {
     // Log every bid/ask price entry to the audit table
     if (trimmed !== '' && numericValue != null) {
       const sz = field === 'bid'
-        ? (update.bid_size as string ?? existing?.bid_size ?? null)
-        : (update.ask_size as string ?? existing?.ask_size ?? null)
+        ? (existing?.bid_size ?? null)
+        : (existing?.ask_size ?? null)
       const baseRow = {
         series_number: seriesNum,
         tranche_name:  trancheName,
