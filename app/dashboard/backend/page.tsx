@@ -713,7 +713,7 @@ export default function BackendPage() {
   function toggleQueueExpand(rowKey: string) {
     setExpandedQueueRows(prev => {
       const next = new Set(prev)
-      if (next.has(rowKey)) next.delete(rowKey) else next.add(rowKey)
+      if (next.has(rowKey)) { next.delete(rowKey) } else { next.add(rowKey) }
       return next
     })
   }
