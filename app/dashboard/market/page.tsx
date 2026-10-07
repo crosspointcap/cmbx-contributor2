@@ -179,7 +179,7 @@ export default function MarketPage() {
       })
 
     async function loadData() {
-      const cutoffIso = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+      const cutoffIso = new Date(Date.now() - 45 * 1000).toISOString()
       const [{ data: sd }, { data: td }, { data: pd }, { data: recentTrades }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
@@ -196,7 +196,7 @@ export default function MarketPage() {
       }
       if (recentTrades) {
         for (const t of recentTrades) {
-          const remaining = new Date(t.created_at).getTime() + 30 * 60 * 1000 - Date.now()
+          const remaining = new Date(t.created_at).getTime() + 45 * 1000 - Date.now()
           if (remaining <= 0) continue
           const key = `${t.series_number}:${t.tranche_name}`
           if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])

@@ -559,7 +559,7 @@ export default function BackendPage() {
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const entry = mapTrade(payload.new)
-        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green', 30000, entry.action === 'HIT' ? 'bid' : 'ask')
+        flashRowEffect(`${entry.series}:${entry.tranche}`, entry.action === 'HIT' ? 'red' : 'green', 45000, entry.action === 'HIT' ? 'bid' : 'ask')
         setTradeLog(entry)
         setBlotterTrades(prev => [entry, ...prev])
       })
@@ -659,10 +659,10 @@ export default function BackendPage() {
       if (td) setTranches(td)
       if (tr) {
         setBlotterTrades(tr.map(mapTrade))
-        const cutoff = Date.now() - 30 * 60 * 1000
+        const cutoff = Date.now() - 45 * 1000
         for (const t of tr) {
           if (!t.created_at || new Date(t.created_at).getTime() < cutoff) continue
-          const remaining = new Date(t.created_at).getTime() + 30 * 60 * 1000 - Date.now()
+          const remaining = new Date(t.created_at).getTime() + 45 * 1000 - Date.now()
           if (remaining <= 0) continue
           const key = `${t.series_number}:${t.tranche_name}`
           if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
@@ -1183,7 +1183,7 @@ export default function BackendPage() {
         : { ask: null, ask_dealer: null, ask_size: null }
       await supabase.from('prices').update(clearFields).eq('series_number', seriesNum).eq('tranche_name', trancheName)
     }
-    flashRowEffect(rowKey, isHit ? 'red' : 'green', 30000, isHit ? 'bid' : 'ask')
+    flashRowEffect(rowKey, isHit ? 'red' : 'green', 45000, isHit ? 'bid' : 'ask')
   }
 
   function renderEditCell(key: string, field: EditField, displayValue: React.ReactNode, tdStyle: React.CSSProperties, flashBg?: string) {
