@@ -229,13 +229,13 @@ export default function MarketPage() {
   }, [])
 
   // Flash row for 30 seconds — solid highlight, no blink
-  function flashRowEffect(key: string, color: 'red' | 'green') {
+  function flashRowEffect(key: string, color: 'red' | 'green', durationMs = 45000) {
     if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
     setFlashRows(prev => ({ ...prev, [key]: color }))
     flashTimers.current[key] = setTimeout(() => {
       setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
       delete flashTimers.current[key]
-    }, 30000)
+    }, durationMs)
   }
 
   const [copyFlash, setCopyFlash] = useState(false)
