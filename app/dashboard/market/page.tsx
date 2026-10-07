@@ -170,7 +170,7 @@ export default function MarketPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
         const t = payload.new as any
         const key = `${t.series_number}:${t.tranche_name}`
-        flashRowEffect(key, t.side === 'hit' ? 'red' : 'green')
+        flashRowEffect(key, t.side === 'hit' ? 'red' : 'green', 45000)
       })
       .subscribe((status) => {
         setRtOk(status === 'SUBSCRIBED')
