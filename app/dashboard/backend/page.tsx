@@ -657,21 +657,7 @@ export default function BackendPage() {
         }
       }
       if (td) setTranches(td)
-      if (tr) {
-        setBlotterTrades(tr.map(mapTrade))
-        const cutoff = Date.now() - 45 * 1000
-        for (const t of tr as any[]) {
-          if (!t.created_at || new Date(t.created_at as string).getTime() < cutoff) continue
-          const remaining = new Date(t.created_at as string).getTime() + 45 * 1000 - Date.now()
-          if (remaining <= 0) continue
-          const key = `${t.series_number}:${t.tranche_name}`
-          if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
-          setFlashRows(prev => ({ ...prev, [key]: t.side === 'hit' ? 'red' : 'green' }))
-          flashTimers.current[key] = setTimeout(() => {
-            setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
-          }, remaining)
-        }
-      }
+      if (tr) setBlotterTrades(tr.map(mapTrade))
       if (pd) {
         setPrices(Object.fromEntries(pd.map((p: Price) => [`${p.series_number}:${p.tranche_name}`, p])))
         setGhostPrices(buildGhostMap(pd))
