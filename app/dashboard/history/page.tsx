@@ -445,9 +445,7 @@ export default function HistoryPage() {
                 const showDealer    = canViewDealerName(pc.dealer, myDealerCode, isTrader)
                 const visibleDealer = showDealer ? (pc.dealer ?? '—') : '—'
                 const dealerColor   = showDealer && pc.dealer ? (DEALER_COLORS[pc.dealer] ?? dimClr) : emptyClr
-                const spx   = spxFor(pc.created_at, pc.spx_at_time)
-                const cdxHy = pc.cdx_hy_at_time ?? null
-                const cdxIg = pc.cdx_ig_at_time ?? null
+                const spx = spxFor(pc.created_at, pc.spx_at_time)
                 return (
                   <tr key={pc.id} style={{ background: i % 2 === 0 ? rowEven : rowOdd, borderBottom: `1px solid ${borderClr}` }}>
                     <td style={{ padding: '3px 12px', color: dimClr }}>{fmtShortDate(pc.created_at)}</td>
@@ -508,9 +506,7 @@ export default function HistoryPage() {
                 const buyer  = t.side === 'lift' ? t.dealer : t.passive_dealer
                 const seller = t.side === 'lift' ? t.passive_dealer : t.dealer
                 const cpty   = t.dealer === myDealerCode ? t.passive_dealer : t.dealer
-                const spx   = spxFor(t.created_at, t.spx_at_time)
-                const cdxHy = t.cdx_hy_at_time ?? null
-                const cdxIg = t.cdx_ig_at_time ?? null
+                const spx = spxFor(t.created_at, t.spx_at_time)
                 return (
                   <tr key={t.id} style={{ background: i % 2 === 0 ? rowEven : rowOdd, borderBottom: `1px solid ${borderClr}` }}>
                     <td style={{ padding: '3px 12px', color: dimClr }}>{fmtShortDate(t.created_at)}</td>
