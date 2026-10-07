@@ -179,10 +179,12 @@ export default function MarketPage() {
       })
 
     async function loadData() {
-      const [{ data: sd }, { data: td }, { data: pd }] = await Promise.all([
+      const cutoffIso = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+      const [{ data: sd }, { data: td }, { data: pd }, { data: recentTrades }] = await Promise.all([
         supabase.from('series_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('tranche_config').select('*').eq('active', true).order('sort_order', { ascending: true }),
         supabase.from('prices').select('*'),
+        supabase.from('trades').select('id, created_at, series_number, tranche_name, side').gte('created_at', cutoffIso).order('created_at', { ascending: false }).limit(50),
       ])
       if (cancelled) return
       if (sd) setSeries(sd)
@@ -191,6 +193,18 @@ export default function MarketPage() {
         const map: Record<string, Price> = {}
         for (const p of pd) map[`${p.series_number}:${p.tranche_name}`] = p
         setPrices(map)
+      }
+      if (recentTrades) {
+        for (const t of recentTrades) {
+          const remaining = new Date(t.created_at).getTime() + 30 * 60 * 1000 - Date.now()
+          if (remaining <= 0) continue
+          const key = `${t.series_number}:${t.tranche_name}`
+          if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
+          setFlashRows(prev => ({ ...prev, [key]: t.side === 'hit' ? 'red' : 'green' }))
+          flashTimers.current[key] = setTimeout(() => {
+            setFlashRows(prev => { const n = { ...prev }; delete n[key]; return n })
+          }, remaining)
+        }
       }
     }
 

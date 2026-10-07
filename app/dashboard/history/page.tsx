@@ -432,15 +432,13 @@ export default function HistoryPage() {
                 <th style={{ textAlign: 'center', padding: '4px 6px',  borderBottom: `2px solid ${theme.fg}44`, fontWeight: 700 }}>SIDE</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>SPREAD</th>
                 <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>SZ</th>
-                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                <th style={{ textAlign: 'right',  padding: '4px 6px',  borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY PX</th>
-                <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #88ccaa', fontWeight: 700 }}>CDX IG</th>
+                <th style={{ textAlign: 'right',  padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
                 {isTrader && <th style={{ padding: '4px 8px', borderBottom: `1px solid ${borderClr}` }} />}
               </tr>
             </thead>
             <tbody>
               {filteredPriceChanges.length === 0 ? (
-                <tr><td colSpan={isTrader ? 11 : 10} style={{ padding: '24px 12px', color: emptyClr, textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 9 : 8} style={{ padding: '24px 12px', color: emptyClr, textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no price activity for selected range'}
                 </td></tr>
               ) : filteredPriceChanges.map((pc, i) => {
@@ -459,14 +457,8 @@ export default function HistoryPage() {
                     <td style={{ textAlign: 'center', padding: '3px 6px', color: pc.side === 'bid' ? theme.bid : theme.ask, fontWeight: 700 }}>{pc.side.toUpperCase()}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px', color: theme.fg, fontWeight: 700 }}>{formatPx(pc.price, pc.mode)}</td>
                     <td style={{ textAlign: 'right',  padding: '3px 6px', color: dimClr }}>{pc.size ?? '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : emptyClr }}>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : emptyClr }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : emptyClr }}>
-                      {cdxHy != null ? `$${cdxHy.toFixed(2)}` : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : emptyClr }}>
-                      {cdxIg != null ? cdxIg.toFixed(2) : '—'}
                     </td>
                     {isTrader && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
@@ -502,14 +494,12 @@ export default function HistoryPage() {
                 {!isTrader && <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>CPTY</th>}
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: `2px solid ${theme.accent}`, fontWeight: 700 }}>SPREAD</th>
                 <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: `1px solid ${borderClr}`, fontWeight: 700 }}>SZ</th>
-                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
-                <th style={{ textAlign: 'right', padding: '4px 6px',  borderBottom: '2px solid #ff8844', fontWeight: 700 }}>HY PX</th>
-                <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #88ccaa', fontWeight: 700 }}>CDX IG</th>
+                <th style={{ textAlign: 'right', padding: '4px 12px', borderBottom: '2px solid #3388ff', fontWeight: 700 }}>SPX</th>
               </tr>
             </thead>
             <tbody>
               {filteredTrades.length === 0 ? (
-                <tr><td colSpan={isTrader ? 10 : 9} style={{ padding: '24px 12px', color: emptyClr, textAlign: 'center' }}>
+                <tr><td colSpan={isTrader ? 8 : 7} style={{ padding: '24px 12px', color: emptyClr, textAlign: 'center' }}>
                   {q ? `— no results for "${searchText}"` : '— no trades for selected range'}
                 </td></tr>
               ) : filteredTrades.map((t, i) => {
@@ -537,14 +527,8 @@ export default function HistoryPage() {
                       {formatPx(t.price, null)}
                     </td>
                     <td style={{ textAlign: 'right', padding: '3px 6px', color: dimClr }}>{t.trade_size ?? '—'}</td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: spx != null ? '#3388ff' : emptyClr }}>
+                    <td style={{ textAlign: 'right', padding: '3px 12px', color: spx != null ? '#3388ff' : emptyClr }}>
                       {spx != null ? Math.round(spx).toLocaleString() : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '3px 6px', color: cdxHy != null ? '#ff8844' : emptyClr }}>
-                      {cdxHy != null ? `$${cdxHy.toFixed(2)}` : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '3px 12px', color: cdxIg != null ? '#88ccaa' : emptyClr }}>
-                      {cdxIg != null ? cdxIg.toFixed(2) : '—'}
                     </td>
                   </tr>
                 )
