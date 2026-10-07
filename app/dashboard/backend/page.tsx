@@ -660,9 +660,9 @@ export default function BackendPage() {
       if (tr) {
         setBlotterTrades(tr.map(mapTrade))
         const cutoff = Date.now() - 45 * 1000
-        for (const t of tr) {
-          if (!t.created_at || new Date(t.created_at).getTime() < cutoff) continue
-          const remaining = new Date(t.created_at).getTime() + 45 * 1000 - Date.now()
+        for (const t of tr as any[]) {
+          if (!t.created_at || new Date(t.created_at as string).getTime() < cutoff) continue
+          const remaining = new Date(t.created_at as string).getTime() + 45 * 1000 - Date.now()
           if (remaining <= 0) continue
           const key = `${t.series_number}:${t.tranche_name}`
           if (flashTimers.current[key]) clearTimeout(flashTimers.current[key])
