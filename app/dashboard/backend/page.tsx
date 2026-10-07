@@ -350,6 +350,8 @@ export default function BackendPage() {
   const [showBlotter, setShowBlotter] = useState(false)
   const [blotterTrades, setBlotterTrades] = useState<BlotterTrade[]>([])
   const [confirmTrade,  setConfirmTrade]  = useState<BlotterTrade | null>(null)
+  const [editingSizeId, setEditingSizeId] = useState<string | null>(null)
+  const [sizeInput,     setSizeInput]     = useState('')
   const [priceQueue, setPriceQueue] = useState<PriceQueueEntry[]>([])
   const [expandedQueueRows, setExpandedQueueRows] = useState<Set<string>>(new Set())
   const [confirmSpread, setConfirmSpread] = useState('')
@@ -880,6 +882,14 @@ export default function BackendPage() {
     }
 
     setEditingCell(null)
+  }
+
+  async function saveTradeSize(id: string) {
+    const val = parseFloat(sizeInput)
+    if (isNaN(val) || val <= 0) { setEditingSizeId(null); return }
+    await supabase.from('trades').update({ trade_size: val }).eq('id', id)
+    setBlotterTrades(prev => prev.map(t => t.id === id ? { ...t, trade_size: val } : t))
+    setEditingSizeId(null)
   }
 
   async function deleteTrade(id: string) {
@@ -1716,7 +1726,27 @@ export default function BackendPage() {
                     <span style={{ color: t.action === 'HIT' ? '#ff6666' : '#66ff88', fontWeight: 700, fontSize: '13px' }}>{t.action}</span>
                     <span style={{ color: '#444', fontSize: '11px' }}>{t.time}</span>
                   </div>
-                  <div style={{ color: '#ccc', fontSize: '13px' }}>{t.tranche}.{t.series}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ color: '#ccc', fontSize: '13px' }}>{t.tranche}.{t.series}</span>
+                    {editingSizeId === t.id ? (
+                      <input
+                        autoFocus
+                        value={sizeInput}
+                        onChange={e => setSizeInput(e.target.value)}
+                        onBlur={() => saveTradeSize(t.id)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveTradeSize(t.id); if (e.key === 'Escape') setEditingSizeId(null) }}
+                        style={{ width: '50px', background: '#0a0a14', border: '1px solid #f0c040', color: '#f0c040', fontFamily: 'Courier New, monospace', fontSize: '12px', padding: '1px 4px', borderRadius: '2px' }}
+                      />
+                    ) : (
+                      <span
+                        onClick={() => { setEditingSizeId(t.id); setSizeInput(String(t.trade_size ?? '')) }}
+                        title="Click to edit size"
+                        style={{ color: '#f0c040', fontSize: '12px', cursor: 'text', borderBottom: '1px dashed #444', minWidth: '20px' }}
+                      >
+                        {t.trade_size != null ? `${t.trade_size}MM` : '—MM'}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ marginTop: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
                       <span style={{ color: '#66ff88', fontWeight: 700 }}>
